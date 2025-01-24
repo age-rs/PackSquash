@@ -8,6 +8,11 @@
 // better world, not just for bragging, ripping off the work of others or other
 // questionable means.
 
+use obfstr::random;
+use rand_xoshiro::{
+	Xoshiro128Plus,
+	rand_core::{RngCore, SeedableRng}
+};
 use std::{
 	borrow::Cow,
 	cell::Cell,
@@ -15,38 +20,26 @@ use std::{
 	io,
 	iter::{self, Once}
 };
-
-use const_random::const_random;
-use rand_xoshiro::{
-	rand_core::{RngCore, SeedableRng},
-	Xoshiro128Plus
-};
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 pub use self::pseudodir_concealment::FileListingCircumstances;
 use self::pseudodir_concealment::PseudodirConcealer;
-use crate::{config::PercentageInteger, RelativePath};
+use crate::{RelativePath, config::PercentageInteger};
 
 use super::{
+	SquashZipSettings,
 	zip_file_record::{
 		CentralDirectoryHeader, CompressionMethod, EndOfCentralDirectory, LocalFileHeader
-	},
-	SquashZipSettings
+	}
 };
 
 mod pseudodir_concealment;
 
 const CRC32_KEY: u32 = {
-	let k = const_random!(u32);
+	let k = random!(u32);
 
-	if k == 0 {
-		0xDEADBEEF
-	} else {
-		k
-	}
+	if k == 0 { 0xDEADBEEF } else { k }
 };
-
-thread_local!(static RNG: Cell<Option<Xoshiro128Plus>> = const { Cell::new(None) });
 
 enum SizeIncreasingObfuscation {
 	Disabled,
@@ -208,12 +201,12 @@ impl ObfuscationEngine {
 						4096 + central_directory_header.compressed_size % 4096;
 				}
 				central_directory_header.local_header_disk_number =
-					(random_u32(seed) % 32768) as u16 + 32768;
+					(random_u32(seed) % 32768) as u16 + 32767;
 			} else {
 				if obfuscate_uncompressed_size {
 					central_directory_header.uncompressed_size = 0xFFFFFF7F;
 				}
-				central_directory_header.local_header_disk_number = u16::MAX;
+				central_directory_header.local_header_disk_number = u16::MAX - 1;
 			}
 
 			if let SizeIncreasingObfuscation::Enabled {
@@ -297,6 +290,8 @@ impl ObfuscationEngine {
 }
 
 fn random_u32(seed: u64) -> u32 {
+	thread_local!(static RNG: Cell<Option<Xoshiro128Plus>> = const { Cell::new(None) });
+
 	RNG.with(|rng_cell| {
 		let mut rng = rng_cell
 			.take()

@@ -1,6 +1,6 @@
 use std::sync::LazyLock;
 
-use futures::{future, StreamExt};
+use futures::{StreamExt, future};
 use patricia_tree::PatriciaSet;
 use regex::Regex;
 use thiserror::Error;
@@ -9,9 +9,9 @@ use tokio_stream::Stream;
 use tokio_util::codec::{FramedRead, LinesCodec, LinesCodecError};
 
 use crate::config::LegacyLanguageFileOptions;
-use crate::pack_file::asset_type::PackFileAssetType;
-use crate::pack_file::util::{prepare_line_for_output, LineNumber, MarkLastDecorator, BOM};
 use crate::pack_file::AsyncReadAndSizeHint;
+use crate::pack_file::asset_type::PackFileAssetType;
+use crate::pack_file::util::{BOM, LineNumber, MarkLastDecorator, prepare_line_for_output};
 
 use super::{OptimizedBytesChunk, PackFile, PackFileConstructor};
 
@@ -30,7 +30,7 @@ static FORMAT_SPECIFIER_REGEX: LazyLock<Regex> = LazyLock::new(|| {
 	// The list of valid flags and conversions was deduced from:
 	// https://github.com/AdoptOpenJDK/openjdk-jdk11/blob/19fb8f93c59dfd791f62d41f332db9e306bc1422/src/java.base/share/classes/java/util/Formatter.java#L4553-L4806
 	//
-	// Note that this regex is not context sensitive: it can't check whether the objects to be formatted
+	// Note that this regex is not context-sensitive: it can't check whether the objects to be formatted
 	// are compatible with the conversion, and it doesn't check that the flags, width, precision and
 	// argument index make sense according to the objects to format and the conversion. It's only meant
 	// to catch blatantly invalid specifiers
@@ -157,7 +157,7 @@ fn process_line<L: Into<String>>(
 	// work than Mojang ;). This might break packs that dealt with the BOM by
 	// including it in the key references elsewhere, so only do it if the option
 	// is enabled
-	if line_number.is_first() && strip_bom && line.chars().next().map_or(false, |c| c == BOM) {
+	if line_number.is_first() && strip_bom && line.starts_with(BOM) {
 		line.remove(0);
 	}
 

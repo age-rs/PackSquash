@@ -32,7 +32,7 @@ impl ZopfliIterationsTimeModel {
 	/// return for data of 1 MiB of magnitude, tuning the model compression-speed tradeoff. The
 	/// `magnitude_power` sets the fractional power that will be used to get a magnitude from the
 	/// size, so a value of 1 is equivalent to an identity function.
-	pub(crate) const fn new(one_mib_iterations: u8, magnitude_power: f32) -> Self {
+	pub(crate) fn new(one_mib_iterations: u8, magnitude_power: f32) -> Self {
 		Self {
 			target_compression_time: (A * one_mib_iterations as f32 + B) * 16.0,
 			magnitude_power
@@ -42,7 +42,7 @@ impl ZopfliIterationsTimeModel {
 	/// Computes an optimum number of Zopfli iterations for a data block whose size is known in
 	/// advance, trying to loosely match the time it would take to compress 1 MiB of data, as
 	/// configured in `new()`. The data is assumed to follow a fixed distribution, somewhere between
-	/// a standard distribution (i.e. the data is random and uncompressible) and a distribution that
+	/// a standard distribution (i.e. the data is random and incompressible) and a distribution that
 	/// always yields zero bytes (i.e. the data is all zeroes and trivial to compress), biasing towards
 	/// the standard distribution (i.e. the data is somewhat difficult to compress).
 	pub(crate) fn iterations_for_data_size(

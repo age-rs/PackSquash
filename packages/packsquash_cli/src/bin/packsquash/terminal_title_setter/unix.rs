@@ -1,10 +1,10 @@
+use super::{TerminalTitleSetterTrait, write_ansi_set_window_title_escape_sequence};
 use std::fs::{File, OpenOptions};
+use std::path::PathBuf;
 use std::{
 	env,
 	io::{self, IsTerminal}
 };
-
-use super::{write_ansi_set_window_title_escape_sequence, TerminalTitleSetterTrait};
 
 /// A terminal title setter for Unix-like platforms.
 pub struct UnixTerminalTitleSetter {
@@ -55,13 +55,13 @@ impl<'title> TerminalTitleSetterTrait<'title> for UnixTerminalTitleSetter {
 	fn set_title(&self, title: &'title UnixTerminalTitleString) {
 		match &self.escape_codes_stream {
 			AnsiEscapeCodesStream::Stdout => {
-				write_ansi_set_window_title_escape_sequence(io::stdout(), title.0)
+				write_ansi_set_window_title_escape_sequence(io::stdout(), title.0);
 			}
 			AnsiEscapeCodesStream::Stderr => {
-				write_ansi_set_window_title_escape_sequence(io::stderr(), title.0)
+				write_ansi_set_window_title_escape_sequence(io::stderr(), title.0);
 			}
 			AnsiEscapeCodesStream::ControllingTty(ctty) => {
-				write_ansi_set_window_title_escape_sequence(ctty, title.0)
+				write_ansi_set_window_title_escape_sequence(ctty, title.0);
 			}
 		}
 	}
@@ -79,11 +79,12 @@ impl<'title> From<&'title str> for UnixTerminalTitleString<'title> {
 
 /// Returns a file path to the controlling terminal of this process. If this
 /// process has no controlling terminal, `None` will be returned.
-fn controlling_terminal() -> Option<String> {
+fn controlling_terminal() -> Option<PathBuf> {
 	use std::ffi::CStr;
 	use std::os::raw::c_char;
 
-	extern "C" {
+	#[allow(unsafe_code)] // SAFETY: the system call definition is correct
+	unsafe extern "C" {
 		/// `char* ctermid(char* s)`, from `#include <stdio.h>`.
 		///
 		/// Documentation: <https://pubs.opengroup.org/onlinepubs/9699919799/functions/ctermid.html>
@@ -100,12 +101,13 @@ fn controlling_terminal() -> Option<String> {
 	// layout than c_char and are interchangeable
 	#[allow(unsafe_code)]
 	unsafe {
-		ctermid(path_buf.as_mut_ptr() as *mut c_char)
+		ctermid(path_buf.as_mut_ptr().cast::<c_char>())
 	};
 
 	let path = CStr::from_bytes_until_nul(&path_buf[..]);
 
 	path.ok()
-		.and_then(|path_cstr| path_cstr.to_str().ok().map(|path_str| path_str.to_string()))
+		.and_then(|path_cstr| path_cstr.to_str().ok())
 		.filter(|path| !path.is_empty())
+		.map(PathBuf::from)
 }

@@ -23,6 +23,19 @@ pub const PACK_FORMAT_VERSION_1_13: i32 = 4;
 pub const PACK_FORMAT_VERSION_1_15: i32 = 5;
 /// The pack format version used in Minecraft versions from 1.17 to 1.17.1.
 pub const PACK_FORMAT_VERSION_1_17: i32 = 7;
+/// The resource pack format version used in Minecraft versions from 23w17a to 1.20.1.
+pub const PACK_FORMAT_RESOURCE_PACK_VERSION_23W_17A: i32 = 15;
+/// The resource pack format version used in Minecraft versions from 21w39a (1.18 snapshot)
+/// to 1.18.2.
+pub const PACK_FORMAT_RESOURCE_PACK_VERSION_1_18: i32 = 8;
+/// The resource pack format version used in Minecraft versions from 24w13a (1.20.5 snapshot)
+/// to 1.20.5-pre3.
+pub const PACK_FORMAT_RESOURCE_PACK_VERSION_24W_13A: i32 = 31;
+/// The resource pack format version used in Minecraft version 24w40a (1.21.2 snapshot).
+pub const PACK_FORMAT_RESOURCE_PACK_VERSION_24W_40A: i32 = 40;
+/// The data pack format version used in Minecraft versions from 24w21a (1.21 snapshot)
+/// to 1.21-pre1.
+pub const PACK_FORMAT_DATA_PACK_VERSION_24W_21A: i32 = 45;
 
 /// Metadata for a resource or data pack, contained in the `pack.mcmeta` or
 /// `pack.mcmetac` file in the root folder of a pack.
@@ -97,7 +110,7 @@ impl PackMeta {
 							_ => {
 								return Err(PackMetaError::MalformedMeta(
 									PACK_FORMAT_VERSION_IS_NOT_INTEGER
-								))
+								));
 							}
 						};
 
@@ -112,26 +125,26 @@ impl PackMeta {
 							Some(_) => {
 								return Err(PackMetaError::MalformedMeta(
 									"The \"description\" key value is not a text component"
-								))
+								));
 							}
 							None => {
 								return Err(PackMetaError::MalformedMeta(
 									"Missing \"description\" key in pack metadata object"
-								))
+								));
 							}
 						};
 					}
 					_ => {
 						return Err(PackMetaError::MalformedMeta(
 							"The \"pack\" key value is not a JSON object"
-						))
+						));
 					}
 				}
 			}
 			_ => {
 				return Err(PackMetaError::MalformedMeta(
 					"The JSON value is not an object"
-				))
+				));
 			}
 		};
 
@@ -156,12 +169,16 @@ impl PackMeta {
 		if self.pack_format_version < PACK_FORMAT_VERSION_1_13 {
 			quirks |= MinecraftQuirk::GrayscaleImagesGammaMiscorrection;
 			quirks |= MinecraftQuirk::RestrictiveBannerLayerTextureFormatCheck;
+			quirks |= MinecraftQuirk::PngObfuscationIncompatibility;
 		}
 
-		if self.pack_format_version < PACK_FORMAT_VERSION_1_15 {
+		if self.pack_format_version < PACK_FORMAT_VERSION_1_15
+			|| self.pack_format_version >= PACK_FORMAT_RESOURCE_PACK_VERSION_24W_13A
+		{
 			// Minecraft 1.14 is compatible with this feature, but we can't tell
 			// it apart from 1.13 due to it sharing the same version number, so
-			// err on the safe side
+			// err on the safe side. For the time being, 24w14a is the last version
+			// to support this feature, but it shares a version number with 24w13a
 			quirks |= MinecraftQuirk::OggObfuscationIncompatibility;
 		}
 
@@ -169,8 +186,12 @@ impl PackMeta {
 			quirks |= MinecraftQuirk::Java8ZipParsing;
 		}
 
-		// All known Minecraft versions are affected by this quirk
-		quirks |= MinecraftQuirk::BadEntityEyeLayerTextureTransparencyBlending;
+		if self.pack_format_version < PACK_FORMAT_RESOURCE_PACK_VERSION_24W_40A {
+			// 24w39a is the first snapshot to have this fixed, but we can't tell it
+			// apart from 24w38a due to it sharing the same pack format version number,
+			// so err on the safe side
+			quirks |= MinecraftQuirk::BadEntityEyeLayerTextureTransparencyBlending;
+		}
 
 		quirks
 	}
@@ -190,12 +211,26 @@ impl PackMeta {
 
 		if self.pack_format_version >= PACK_FORMAT_VERSION_1_13 {
 			asset_type_mask -= PackFileAssetType::LegacyLanguageFile;
+			asset_type_mask -= PackFileAssetType::TrueTypeFont;
 		}
 
 		if self.pack_format_version >= PACK_FORMAT_VERSION_1_17 {
 			asset_type_mask -= PackFileAssetType::LegacyTextCredits;
 		} else {
 			asset_type_mask -= PackFileAssetType::TranslationUnitSegment;
+		}
+
+		if self.pack_format_version < PACK_FORMAT_RESOURCE_PACK_VERSION_1_18 {
+			asset_type_mask -= PackFileAssetType::ClosingCreditsText;
+		}
+
+		if self.pack_format_version >= PACK_FORMAT_RESOURCE_PACK_VERSION_23W_17A {
+			asset_type_mask -= PackFileAssetType::LegacyUnicodeFontCharacterSizes;
+		}
+
+		if self.pack_format_version >= PACK_FORMAT_DATA_PACK_VERSION_24W_21A {
+			asset_type_mask -= PackFileAssetType::LegacyNbtStructure;
+			asset_type_mask -= PackFileAssetType::LegacyCommandFunction;
 		}
 
 		asset_type_mask

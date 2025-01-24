@@ -40,13 +40,13 @@ can apply the following specific techniques:
   libraries.
 - For Ogg (.ogg and .oga), MP3, M4A, FLAC, and WAV files: channel mixing,
   downsampling, transcoding with a state-of-the-art Vorbis encoder, pitch
-  shifting, tag removal, and two-pass optimization and validation with
-  [OptiVorbis](https://github.com/OptiVorbis/OptiVorbis). The default settings
-  are meant to be good enough for in-game music, such that most listeners will
-  think that the quality is good and not distracting. Because channel mixing may
-  change how the Minecraft sound engine computes positional effects (see
-  [MC-146721](https://bugs.mojang.com/browse/MC-146721)), PackSquash won't do it
-  by default.
+  shifting, tag removal, silence truncation, and two-pass optimization and
+  validation with [OptiVorbis](https://github.com/OptiVorbis/OptiVorbis). The
+  default settings are meant to be good enough for in-game music, such that most
+  listeners will think that the quality is good and not distracting. Because
+  channel mixing may change how the Minecraft sound engine computes positional
+  effects (see [MC-146721](https://bugs.mojang.com/browse/MC-146721)),
+  PackSquash won't do it by default.
 - For JSON files (.json, .jsonc, .mcmeta and .mcmetac; if OptiFine mod support
   is enabled, also .jem, .jemc, .jpm and .jpmc): minification, by removing
   unneeded whitespace. As a side bonus, because minification requires parsing
@@ -95,7 +95,7 @@ user:
 - Deduplicating identical files within the generated ZIP file: the contents of
   files repeated several times over will be stored only once.
 - Protecting the generated ZIP files, making them harder to read by most ZIP
-  manipulation programs.
+  manipulation programs, and some of the files stored inside such ZIP files.
 
 ## 🔗 Download and usage
 
@@ -154,7 +154,7 @@ about this, communicating them in public announcements.
 
 ## ✨ Contributors
 
-Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/docs/en/emoji-key)):
+Thanks goes to these wonderful people and projects ([emoji key](https://allcontributors.org/docs/en/emoji-key)):
 
 <!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
 <!-- prettier-ignore-start -->
@@ -166,29 +166,31 @@ Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/d
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/Aiamded"><img src="https://avatars.githubusercontent.com/u/71924226?v=4?s=75" width="75px;" alt="Aiamded"/><br /><sub><b>Aiamded</b></sub></a><br /><a href="#ideas-Aiamded" title="Ideas, Planning, & Feedback">🤔</a> <a href="https://github.com/ComunidadAylas/PackSquash/issues?q=author%3AAiamded" title="Bug reports">🐛</a> <a href="#data-Aiamded" title="Data">🔣</a> <a href="#userTesting-Aiamded" title="User Testing">📓</a> <a href="#financial-Aiamded" title="Financial">💵</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/benwickham"><img src="https://avatars.githubusercontent.com/u/137005985?v=4?s=75" width="75px;" alt="Ben Wickham (Eraze)"/><br /><sub><b>Ben Wickham (Eraze)</b></sub></a><br /><a href="#financial-benwickham" title="Financial">💵</a> <a href="#ideas-benwickham" title="Ideas, Planning, & Feedback">🤔</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/CallumBugajski"><img src="https://avatars.githubusercontent.com/u/11320476?v=4?s=75" width="75px;" alt="CallumBugajski"/><br /><sub><b>CallumBugajski</b></sub></a><br /><a href="https://github.com/ComunidadAylas/PackSquash/issues?q=author%3ACallumBugajski" title="Bug reports">🐛</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://luedt.ke/"><img src="https://avatars.githubusercontent.com/u/13185260?v=4?s=75" width="75px;" alt="David Lüdtke"/><br /><sub><b>David Lüdtke</b></sub></a><br /><a href="https://github.com/ComunidadAylas/PackSquash/issues?q=author%3AMrKinau" title="Bug reports">🐛</a> <a href="#ideas-MrKinau" title="Ideas, Planning, & Feedback">🤔</a> <a href="#userTesting-MrKinau" title="User Testing">📓</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/Felixx61"><img src="https://avatars.githubusercontent.com/u/4580537?v=4?s=75" width="75px;" alt="Felixx61"/><br /><sub><b>Felixx61</b></sub></a><br /><a href="#userTesting-Felixx61" title="User Testing">📓</a> <a href="#data-Felixx61" title="Data">🔣</a> <a href="#ideas-Felixx61" title="Ideas, Planning, & Feedback">🤔</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/mergu"><img src="https://avatars.githubusercontent.com/u/29823405?v=4?s=75" width="75px;" alt="Jay Hopkins"/><br /><sub><b>Jay Hopkins</b></sub></a><br /><a href="#userTesting-mergu" title="User Testing">📓</a> <a href="#data-mergu" title="Data">🔣</a></td>
-      <td align="center" valign="top" width="14.28%"><a href="https://github.com/Joshinn-io"><img src="https://avatars.githubusercontent.com/u/39896452?v=4?s=75" width="75px;" alt="Joshua"/><br /><sub><b>Joshua</b></sub></a><br /><a href="https://github.com/ComunidadAylas/PackSquash/issues?q=author%3AJoshinn-io" title="Bug reports">🐛</a> <a href="#financial-Joshinn-io" title="Financial">💵</a></td>
     </tr>
     <tr>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/Joshinn-io"><img src="https://avatars.githubusercontent.com/u/39896452?v=4?s=75" width="75px;" alt="Joshua"/><br /><sub><b>Joshua</b></sub></a><br /><a href="https://github.com/ComunidadAylas/PackSquash/issues?q=author%3AJoshinn-io" title="Bug reports">🐛</a> <a href="#financial-Joshinn-io" title="Financial">💵</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://lx862.com/"><img src="https://avatars.githubusercontent.com/u/28094366?v=4?s=75" width="75px;" alt="LX862"/><br /><sub><b>LX862</b></sub></a><br /><a href="#ideas-Kenny-Hui" title="Ideas, Planning, & Feedback">🤔</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://www.planetminecraft.com/member/luish54/"><img src="https://avatars.githubusercontent.com/u/103937012?v=4?s=75" width="75px;" alt="Luis"/><br /><sub><b>Luis</b></sub></a><br /><a href="https://github.com/ComunidadAylas/PackSquash/issues?q=author%3ALuishMC" title="Bug reports">🐛</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/MKMakroM"><img src="https://avatars.githubusercontent.com/u/45736418?v=4?s=75" width="75px;" alt="MKMakroM"/><br /><sub><b>MKMakroM</b></sub></a><br /><a href="#financial-MKMakroM" title="Financial">💵</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://manacube.com/"><img src="https://i.imgur.com/D9gJEr6.png?s=75" width="75px;" alt="ManaCube"/><br /><sub><b>ManaCube</b></sub></a><br /><a href="#financial" title="Financial">💵</a> <a href="https://github.com/ComunidadAylas/PackSquash/issues?q=author%3A" title="Bug reports">🐛</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://iptables.sh/"><img src="https://avatars.githubusercontent.com/u/28601081?v=4?s=75" width="75px;" alt="Michael"/><br /><sub><b>Michael</b></sub></a><br /><a href="#data-clrxbl" title="Data">🔣</a> <a href="#ideas-clrxbl" title="Ideas, Planning, & Feedback">🤔</a> <a href="#userTesting-clrxbl" title="User Testing">📓</a> <a href="#fundingFinding-clrxbl" title="Funding Finding">🔍</a> <a href="#tool-clrxbl" title="Tools">🔧</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://discord.gg/RVAgQRS"><img src="https://avatars.githubusercontent.com/u/31966940?v=4?s=75" width="75px;" alt="Miguel"/><br /><sub><b>Miguel</b></sub></a><br /><a href="#design-MiguelDreamer" title="Design">🎨</a> <a href="#ideas-MiguelDreamer" title="Ideas, Planning, & Feedback">🤔</a></td>
-      <td align="center" valign="top" width="14.28%"><a href="https://github.com/xMikux"><img src="https://avatars.githubusercontent.com/u/26039249?v=4?s=75" width="75px;" alt="Miku"/><br /><sub><b>Miku</b></sub></a><br /><a href="#translation-xMikux" title="Translation">🌍</a> <a href="https://github.com/ComunidadAylas/PackSquash/commits?author=xMikux" title="Documentation">📖</a></td>
-      <td align="center" valign="top" width="14.28%"><a href="https://github.com/MinecraftAdmin"><img src="https://avatars.githubusercontent.com/u/1650123?v=4?s=75" width="75px;" alt="MinecraftAdmin"/><br /><sub><b>MinecraftAdmin</b></sub></a><br /><a href="#ideas-MinecraftAdmin" title="Ideas, Planning, & Feedback">🤔</a></td>
     </tr>
     <tr>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/xMikux"><img src="https://avatars.githubusercontent.com/u/26039249?v=4?s=75" width="75px;" alt="Miku"/><br /><sub><b>Miku</b></sub></a><br /><a href="#translation-xMikux" title="Translation">🌍</a> <a href="https://github.com/ComunidadAylas/PackSquash/commits?author=xMikux" title="Documentation">📖</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/MinecraftAdmin"><img src="https://avatars.githubusercontent.com/u/1650123?v=4?s=75" width="75px;" alt="MinecraftAdmin"/><br /><sub><b>MinecraftAdmin</b></sub></a><br /><a href="#ideas-MinecraftAdmin" title="Ideas, Planning, & Feedback">🤔</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://paulf.me/"><img src="https://avatars.githubusercontent.com/u/5201207?v=4?s=75" width="75px;" alt="Paul Fulham"/><br /><sub><b>Paul Fulham</b></sub></a><br /><a href="#ideas-pau101" title="Ideas, Planning, & Feedback">🤔</a> <a href="https://github.com/ComunidadAylas/PackSquash/commits?author=pau101" title="Code">💻</a> <a href="#research-pau101" title="Research">🔬</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/Derkades"><img src="https://avatars.githubusercontent.com/u/15892014?v=4?s=75" width="75px;" alt="Robin"/><br /><sub><b>Robin</b></sub></a><br /><a href="#ideas-Derkades" title="Ideas, Planning, & Feedback">🤔</a> <a href="https://github.com/ComunidadAylas/PackSquash/commits?author=Derkades" title="Documentation">📖</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/Silmarost"><img src="https://avatars.githubusercontent.com/u/52896544?v=4?s=75" width="75px;" alt="Silmarost"/><br /><sub><b>Silmarost</b></sub></a><br /><a href="#data-Silmarost" title="Data">🔣</a> <a href="#ideas-Silmarost" title="Ideas, Planning, & Feedback">🤔</a> <a href="#userTesting-Silmarost" title="User Testing">📓</a> <a href="#financial-Silmarost" title="Financial">💵</a> <a href="#translation-Silmarost" title="Translation">🌍</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/SuperJohan16"><img src="https://avatars.githubusercontent.com/u/73500074?v=4?s=75" width="75px;" alt="SuperJohan16"/><br /><sub><b>SuperJohan16</b></sub></a><br /><a href="#translation-SuperJohan16" title="Translation">🌍</a> <a href="#financial-SuperJohan16" title="Financial">💵</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://alumina6767.net/"><img src="https://avatars.githubusercontent.com/u/85728971?v=4?s=75" width="75px;" alt="alumina6767"/><br /><sub><b>alumina6767</b></sub></a><br /><a href="#blog-alumina6767" title="Blogposts">📝</a> <a href="#translation-alumina6767" title="Translation">🌍</a> <a href="#ideas-alumina6767" title="Ideas, Planning, & Feedback">🤔</a></td>
-      <td align="center" valign="top" width="14.28%"><a href="https://github.com/pacificminer"><img src="https://avatars.githubusercontent.com/u/24826002?v=4?s=75" width="75px;" alt="pacificminer"/><br /><sub><b>pacificminer</b></sub></a><br /><a href="#financial-pacificminer" title="Financial">💵</a></td>
-      <td align="center" valign="top" width="14.28%"><a href="https://github.com/realkarmakun"><img src="https://avatars.githubusercontent.com/u/20980281?v=4?s=75" width="75px;" alt="realkarmakun"/><br /><sub><b>realkarmakun</b></sub></a><br /><a href="#platform-realkarmakun" title="Packaging/porting to new platform">📦</a> <a href="#ideas-realkarmakun" title="Ideas, Planning, & Feedback">🤔</a> <a href="#userTesting-realkarmakun" title="User Testing">📓</a> <a href="https://github.com/ComunidadAylas/PackSquash/commits?author=realkarmakun" title="Documentation">📖</a></td>
     </tr>
     <tr>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/pacificminer"><img src="https://avatars.githubusercontent.com/u/24826002?v=4?s=75" width="75px;" alt="pacificminer"/><br /><sub><b>pacificminer</b></sub></a><br /><a href="#financial-pacificminer" title="Financial">💵</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/realkarmakun"><img src="https://avatars.githubusercontent.com/u/20980281?v=4?s=75" width="75px;" alt="realkarmakun"/><br /><sub><b>realkarmakun</b></sub></a><br /><a href="#platform-realkarmakun" title="Packaging/porting to new platform">📦</a> <a href="#ideas-realkarmakun" title="Ideas, Planning, & Feedback">🤔</a> <a href="#userTesting-realkarmakun" title="User Testing">📓</a> <a href="https://github.com/ComunidadAylas/PackSquash/commits?author=realkarmakun" title="Documentation">📖</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/rswishart"><img src="https://avatars.githubusercontent.com/u/115955715?v=4?s=75" width="75px;" alt="rswishart"/><br /><sub><b>rswishart</b></sub></a><br /><a href="#financial-rswishart" title="Financial">💵</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/victorlf4"><img src="https://avatars.githubusercontent.com/u/33629877?v=4?s=75" width="75px;" alt="victorlf4"/><br /><sub><b>victorlf4</b></sub></a><br /><a href="#ideas-victorlf4" title="Ideas, Planning, & Feedback">🤔</a></td>
     </tr>

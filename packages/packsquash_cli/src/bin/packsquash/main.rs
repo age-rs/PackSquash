@@ -1,3 +1,5 @@
+//! The `PackSquash` proper CLI application code.
+
 use anstyle::{AnsiColor, Color, Effects};
 use std::{
 	borrow::Cow,
@@ -11,15 +13,15 @@ use std::{
 
 use env_logger::{Builder, Target, WriteStyle};
 use getopts::{Options, ParsingStyle};
-use log::{debug, error, info, trace, warn, Level, LevelFilter};
-use tokio::{runtime, select, sync::mpsc::channel, time::sleep};
-
+use log::{Level, LevelFilter, debug, error, info, trace, warn};
 use packsquash::{
-	config::SquashOptions, vfs::os_fs::OsFilesystem, PackSquasher, PackSquasherError,
-	PackSquasherStatus, PackSquasherWarning
+	PackSquasher, PackSquasherError, PackSquasherStatus, PackSquasherWarning, config::SquashOptions,
+	vfs::os_fs::OsFilesystem
 };
 use terminal_style::{environment_allows_color, environment_allows_emoji};
 use terminal_title_controller::TerminalTitleController;
+use tokio::{runtime, select, sync::mpsc::channel, time::sleep};
+use tz::UtcDateTime;
 
 mod terminal_style;
 mod terminal_title_controller;
@@ -43,7 +45,7 @@ fn main() {
 	process::exit(run(TerminalTitleController::new()));
 }
 
-/// Runs PackSquash, parsing the command line parameters and deciding what options file
+/// Runs `PackSquash`, parsing the command line parameters and deciding what options file
 /// to read to process a pack.
 fn run(title_controller: Option<TerminalTitleController>) -> i32 {
 	// Show initial title
@@ -166,14 +168,13 @@ fn read_options_file_and_squash(
 	);
 
 	// Read the TOML configuration data from the specified source
-	let options_string = match match options_file_path {
-		Some(path) => fs::read_to_string(path),
-		None => {
-			let mut buf = String::new();
-			match io::stdin().read_to_string(&mut buf) {
-				Ok(_) => Ok(buf),
-				Err(err) => Err(err)
-			}
+	let options_string = match if let Some(path) = options_file_path {
+		fs::read_to_string(path)
+	} else {
+		let mut buf = String::new();
+		match io::stdin().read_to_string(&mut buf) {
+			Ok(_) => Ok(buf),
+			Err(err) => Err(err)
 		}
 	} {
 		Ok(options_string) => options_string,
@@ -274,8 +275,7 @@ fn squash(
 	// the title on a single thread: updating the display
 	let runtime = runtime::Builder::new_current_thread()
 		.enable_time()
-		.build()
-		.unwrap();
+		.build()?;
 
 	let cli_update_task = runtime.spawn(async move {
 		/// The maximum interval of time between two progress ticks of the title. Used to assure
@@ -297,7 +297,7 @@ fn squash(
 					Some(status_update) => match status_update {
 						PackSquasherStatus::PackFileProcessed(pack_file_status) => {
 							total_file_count += 1;
-							processed_file_count += 1 - pack_file_status.skipped() as u64;
+							processed_file_count += 1 - u64::from(pack_file_status.skipped());
 
 							match pack_file_status.optimization_error() {
 								Some(error_description) => error!(
@@ -311,13 +311,13 @@ fn squash(
 											"{}: {}",
 											pack_file_status.path().as_str(),
 											pack_file_status.optimization_strategy()
-										)
+										);
 									} else {
 										trace!(
 											"{}: {}",
 											pack_file_status.path().as_str(),
 											pack_file_status.optimization_strategy()
-										)
+										);
 									};
 								}
 							};
@@ -347,13 +347,13 @@ fn squash(
 									Was the file last modified by PackSquash? Cause: {}",
 								err
 							),
-							PackSquasherWarning::LowEntropySystemId => warn!(
-								"Used a low entropy system ID. The dates embedded in the result ZIP file, \
+							PackSquasherWarning::PredictableSystemTimeSanitizationKey => warn!(
+								"Used predictable system IDs to build encryption keys. The dates embedded in the result ZIP file, \
 									which reveal when it was generated, may be easier to decrypt. For more information \
 									about the topic, check out <https://packsquash.page.link/Low-entropy-system-ID-help>"
 							),
-							PackSquasherWarning::VolatileSystemId => warn!(
-								"Used a volatile system ID. You maybe should not reuse the result ZIP file, \
+							PackSquasherWarning::VolatileSystemTimeSanitizationKey => warn!(
+								"Used a volatile system IDs to build encryption keys. You maybe should not reuse the result ZIP file, \
 									as unexpected results can occur after you use your device as usual. For more information \
 									about the topic, check out <https://packsquash.page.link/Volatile-system-ID-help>"
 							),
@@ -371,7 +371,7 @@ fn squash(
 						break
 					}
 				},
-				_ = &mut progress_tick_timer => {
+				() = &mut progress_tick_timer => {
 					// We have not yet received any message from the PackSquasher. Change the title
 					// so that we give the user the illusion of some progress, and then schedule
 					// another progress tick
@@ -397,30 +397,34 @@ fn squash(
 		// Wait for completion. Unwrap the handle because any panic in the thread is fatal anyway,
 		// and we should propagate it
 		match packsquasher.await.unwrap() {
-			Ok(_) => Ok(cli_update_task.await.ok()),
+			Ok(()) => Ok(cli_update_task.await.ok()),
 			Err(err) => Err(err)
 		}
 	})
 }
 
-/// Prints PackSquash version information to the standard output stream.
+/// Prints `PackSquash` version information to the standard output stream.
 fn print_version_information(verbose: bool) {
+	let build_date_time =
+		UtcDateTime::from_timespec(env!("PACKSQUASH_BUILD_TIMESTAMP").parse().unwrap(), 0).unwrap();
+
 	println!(
 		"PackSquash {} ({}, {}) for {}",
 		env!("PACKSQUASH_BUILD_VERSION"),
 		env!("CARGO_PROFILE"),
-		env!("PACKSQUASH_BUILD_DATE"),
+		format_args!(
+			"{:04}-{:02}-{:02}",
+			build_date_time.year(),
+			build_date_time.month(),
+			build_date_time.month_day()
+		),
 		env!("CARGO_TARGET_TRIPLE")
 	);
 	println!("{}", env!("CARGO_PKG_DESCRIPTION"));
 	println!();
 
 	if verbose {
-		println!(
-			"Copyright (C){} {}",
-			env!("PACKSQUASH_COPYRIGHT_BUILD_YEAR_SUFFIX"),
-			env!("CARGO_PKG_AUTHORS")
-		);
+		println!("Copyright (C) {}", env!("CARGO_PKG_AUTHORS"));
 		println!();
 		println!("This program is free software: you can redistribute it and/or modify");
 		println!("it under the terms of the GNU Affero General Public License as");
@@ -442,7 +446,7 @@ fn print_version_information(verbose: bool) {
 	}
 }
 
-/// Initializes the logging of the application, responsible of showing to the user relevant
+/// Initializes the logging of the application, responsible for showing to the user relevant
 /// application operation information.
 fn init_logger(enable_emoji: bool, enable_colors: bool) {
 	let mut logger_builder = Builder::new();

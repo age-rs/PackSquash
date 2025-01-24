@@ -1,9 +1,9 @@
-//! Automated benchmarks for the PackSquash library, using the Criterion framework.
+//! Automated benchmarks for the `PackSquash` library, using the Criterion framework.
 
 use std::path::Path;
 use std::time::Duration;
 
-use criterion::{measurement::Measurement, BatchSize, BenchmarkGroup, Criterion, SamplingMode};
+use criterion::{BatchSize, BenchmarkGroup, Criterion, SamplingMode, measurement::Measurement};
 #[cfg(all(target_os = "linux", any(target_arch = "x86", target_arch = "x86_64")))]
 use criterion_perf_events::Perf;
 use enumset::EnumSet;
@@ -16,9 +16,9 @@ use tempfile::NamedTempFile;
 
 use pack_dataset::PackDataset;
 use packsquash::{
+	PackSquasher,
 	config::{FileOptions, GlobalOptions, ProcessedSquashOptions, SquashOptions},
-	vfs::os_fs::OsFilesystem,
-	PackSquasher
+	vfs::os_fs::OsFilesystem
 };
 
 mod pack_dataset;
@@ -44,7 +44,7 @@ fn empty_pack<M: Measurement + 'static>(
 			},
 			squash_pack,
 			BatchSize::SmallInput
-		)
+		);
 	});
 }
 
@@ -66,7 +66,7 @@ fn aylas_khron_micro_pack<M: Measurement + 'static>(
 			},
 			squash_pack,
 			BatchSize::SmallInput
-		)
+		);
 	});
 }
 
@@ -94,7 +94,7 @@ fn jilchu_chronos_micro_pack<M: Measurement + 'static>(
 			},
 			squash_pack,
 			BatchSize::SmallInput
-		)
+		);
 	});
 }
 
@@ -122,7 +122,7 @@ fn aiamded_breadstick_micro_pack<M: Measurement + 'static>(
 			},
 			squash_pack,
 			BatchSize::SmallInput
-		)
+		);
 	});
 }
 
@@ -141,7 +141,7 @@ custom_criterion_group! {
 		.warm_up_time(Duration::from_secs(1))
 		.sample_size(10)
 		.with_measurement(Perf::new(PerfCounterBuilder::from_hardware_event(HardwareEventType::Instructions)));
-	// This perf counter is highly deterministic and little sensitive to external noise, so less samples are okay
+	// This perf counter is highly deterministic and little sensitive to external noise, so fewer samples are okay
 	sampling_mode = SamplingMode::Flat;
 	targets = empty_pack
 }
@@ -153,7 +153,7 @@ custom_criterion_group! {
 		.warm_up_time(Duration::from_secs(1))
 		.sample_size(10)
 		.with_measurement(Perf::new(PerfCounterBuilder::from_software_event(SoftwareEventType::ContextSwitches)));
-	// This perf counter is highly deterministic and little sensitive to external noise, so less samples are okay
+	// This perf counter is highly deterministic and little sensitive to external noise, so fewer samples are okay
 	sampling_mode = SamplingMode::Flat;
 	targets = empty_pack
 }
@@ -176,7 +176,7 @@ custom_criterion_group! {
 		.measurement_time(Duration::from_secs(45))
 		.sample_size(10)
 		.with_measurement(Perf::new(PerfCounterBuilder::from_hardware_event(HardwareEventType::Instructions)));
-	// This perf counter is highly deterministic and little sensitive to external noise, so less samples are okay
+	// This perf counter is highly deterministic and little sensitive to external noise, so fewer samples are okay
 	sampling_mode = SamplingMode::Flat;
 	targets = aylas_khron_micro_pack, jilchu_chronos_micro_pack, aiamded_breadstick_micro_pack
 }
@@ -189,7 +189,7 @@ custom_criterion_group! {
 		.measurement_time(Duration::from_secs(45))
 		.sample_size(10)
 		.with_measurement(Perf::new(PerfCounterBuilder::from_software_event(SoftwareEventType::ContextSwitches)));
-	// This perf counter is highly deterministic and little sensitive to external noise, so less samples are okay
+	// This perf counter is highly deterministic and little sensitive to external noise, so fewer samples are okay
 	sampling_mode = SamplingMode::Flat;
 	targets = aylas_khron_micro_pack, jilchu_chronos_micro_pack, aiamded_breadstick_micro_pack
 }

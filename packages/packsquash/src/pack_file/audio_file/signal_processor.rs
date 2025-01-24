@@ -8,9 +8,9 @@ use dasp_interpolate::sinc::Sinc;
 use dasp_signal::Signal;
 use rubato::{FftFixedIn, Resampler};
 use std::io::{ErrorKind, Read};
-use std::num::{NonZeroU32, NonZeroU8};
+use std::num::{NonZeroU8, NonZeroU32};
 use symphonia::core::audio::SampleBuffer;
-use symphonia::core::codecs::{Decoder, DecoderOptions, CODEC_TYPE_NULL};
+use symphonia::core::codecs::{CODEC_TYPE_NULL, Decoder, DecoderOptions};
 use symphonia::core::formats::{FormatOptions, FormatReader};
 use symphonia::core::io::{MediaSourceStream, MediaSourceStreamOptions, ReadOnlySource};
 use symphonia::core::meta::{Limit, MetadataOptions};
@@ -601,7 +601,7 @@ where
 				}
 			}
 
-			// In case of errors or EOF, fall back to a equilibrium-valued frame.
+			// In case of errors or EOF, fall back to an equilibrium-valued frame.
 			// As per Signal trait docs, "calling next on an exhausted signal
 			// should always yield Self::Frame::EQUILIBRIUM."
 			return Self::Frame::EQUILIBRIUM;
@@ -730,7 +730,7 @@ where
 				}
 			}
 
-			// In case of errors or EOF, fall back to a equilibrium-valued frame.
+			// In case of errors or EOF, fall back to an equilibrium-valued frame.
 			// As per Signal trait docs, "calling next on an exhausted signal
 			// should always yield Self::Frame::EQUILIBRIUM."
 			return Self::Frame::EQUILIBRIUM;

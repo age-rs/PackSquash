@@ -5,7 +5,7 @@ use std::{
 	borrow::Cow,
 	io,
 	ops::Deref,
-	path::{Path, MAIN_SEPARATOR}
+	path::{MAIN_SEPARATOR, Path}
 };
 
 use thiserror::Error;
@@ -38,15 +38,12 @@ pub enum InvalidPathError<'a> {
 
 impl From<InvalidPathError<'_>> for io::Error {
 	fn from(error: InvalidPathError<'_>) -> Self {
-		io::Error::new(
-			io::ErrorKind::Other,
-			match error {
-				InvalidPathError::NonUnicode(error_message) => {
-					InvalidPathError::NonUnicode(Cow::Owned(error_message.into_owned()))
-				}
-				InvalidPathError::TooBig => InvalidPathError::TooBig
+		io::Error::new(io::ErrorKind::Other, match error {
+			InvalidPathError::NonUnicode(error_message) => {
+				InvalidPathError::NonUnicode(Cow::Owned(error_message.into_owned()))
 			}
-		)
+			InvalidPathError::TooBig => InvalidPathError::TooBig
+		})
 	}
 }
 
@@ -60,7 +57,7 @@ impl<'a> RelativePath<'a> {
 	/// the ancestor path, without any checking. Therefore, the returned path
 	/// will only make sense if this assumption is withheld. No canonicalization
 	/// or symlink resolving is performed, as those may expose the physical
-	/// structure, which may be different than the logical, expected directory
+	/// structure, which may be different from the logical, expected directory
 	/// structure.
 	pub(crate) fn new<P1: AsRef<Path> + ?Sized, P2: AsRef<Path> + ?Sized>(
 		ancestor_path: &P1,
@@ -127,7 +124,7 @@ impl<'a> RelativePath<'a> {
 	/// Consumes this relative path to get another that owns all the path data it refers
 	/// to, so that its lifetime bounds can now be indefinitely long.
 	///
-	/// This only allocates memory if the relative path didn't own all of the data it
+	/// This only allocates memory if the relative path didn't own all the data it
 	/// referred to. Otherwise, this operation is effectively a no-op.
 	pub fn into_owned(self) -> RelativePath<'static> {
 		RelativePath(Cow::Owned(self.0.into_owned()))
@@ -149,7 +146,7 @@ impl<'a> RelativePath<'a> {
 	/// any checks or processing. This is a low-level constructor.
 	///
 	/// # Assumptions
-	/// The caller is responsible of providing a string that upholds the expectations
+	/// The caller is responsible for providing a string that upholds the expectations
 	/// of this struct; namely, that the string is a normalized, relative path that
 	/// always uses the forward slash (/) as a component separator, and does not
 	/// exceed 65535 bytes.

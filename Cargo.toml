@@ -1,6 +1,13 @@
 [workspace]
 members = ["packages/*"]
-resolver = "2"
+resolver = "3"
+
+[workspace.package]
+version = "0.4.0"
+repository = "https://github.com/ComunidadAylas/PackSquash"
+license = "AGPL-3.0-or-later"
+edition = "2024"
+publish = false
 
 [patch.crates-io]
 # Use our fork of glsl-lang that allows it to parse #moj_import directives
@@ -15,15 +22,9 @@ glsl-lang-types = { git = "https://github.com/ComunidadAylas/glsl-lang" }
 # Related PR: https://github.com/rbranson/rust-mmap/pull/13
 mmap = { git = "https://github.com/ComunidadAylas/rust-mmap" }
 
-# Use a PR we submitted for updating the libspng version their Rust bindings link to.
-# This is a best-effort fix for memory management errors in libspng v0.7.0-rc2 when
-# decoding PNGs with color palettes on ARM CPUs with NEON extensions, as reported by
-# a PackSquash user of an M1 Pro, and other ARM users in other projects:
-# https://github.com/lovell/sharp/issues/3222
-# We could not reproduce the reported PackSquash issue on an ARM Ubuntu 22.04 virtual
-# machine with an Ampere Altra Neoverse-N1 CPU using the musl binaries with mimalloc,
-# so it may be dependent on the malloc implementation or other environment factors
-spng = { git = "https://github.com/aloucks/spng-rs", ref = "refs/pull/8/head" }
+# Use a newer spng commit with our PR to add a high-level API for customizing the decoder chunk CRC
+# mismatch action merged. Related PR: https://github.com/aloucks/spng-rs/pull/16
+spng = { git = "https://github.com/aloucks/spng-rs", rev = "d3f69ff" }
 
 [profile.release]
 opt-level = 3
@@ -35,3 +36,19 @@ strip = "symbols"
 inherits = "release"
 debug = true
 strip = "none"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+missing_docs = "deny"
+# deny instead of forbid is required by the thread_local macro with const initializers
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+#pedantic = "warn" # TODO too pedantic for now, fix the warnings and re-enable this sooner than later
+cargo = { level = "warn", priority = -1 }
+multiple_crate_versions = "allow"         # Introduces much noise, not better than cargo deny
+
+[workspace.lints.rustdoc]
+invalid_html_tags = "deny"
+broken_intra_doc_links = "deny"
+private_intra_doc_links = "deny"

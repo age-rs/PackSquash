@@ -6,6 +6,9 @@ on:
     types:
       - opened
       - synchronize
+  merge_group:
+    types:
+      - checks_requested
   release:
     types:
       - published
@@ -13,13 +16,13 @@ on:
 env:
   DEBIAN_FRONTEND: noninteractive
 
-  CONST_RANDOM_SEED: ${{ secrets.CONST_RANDOM_SEED }}
+  OBFSTR_SEED: ${{ secrets.CONST_RANDOM_SEED }}
 
 jobs:
   static-analysis:
     name: Static analysis
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
 
     # Exclude in-repo PRs from running this job
@@ -27,26 +30,50 @@ jobs:
 
     steps:
       - name: 📥 Checkout source
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: 🧰 Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1482605bfc5719782e1267fd0c0cc350fe7646b8 # v1
+        uses: dtolnay/rust-toolchain@a54c7afa936fefeb4456b2dd8068152669aa8203 # v1
         with:
           toolchain: nightly
           components: rustfmt, clippy
 
-      - name: 🔍 Clippy check
-        uses: giraffate/clippy-action@13b9d32482f25d29ead141b79e7e04e7900281e0 # v1
+      - name: 🧰 Install clippy-sarif
+        uses: taiki-e/install-action@7e1dca9e0c58340bd342a8aa00ad82587936018d # v2
         with:
-          clippy_flags: --all-targets -D warnings
-          reporter: github-check
-          fail_on_error: true
+          tool: clippy-sarif
 
-      - name: 🔍 Cargo deny check
-        uses: EmbarkStudios/cargo-deny-action@64015a69ee7ee08f6c56455089cdaf6ad974fd15 # v1
+      - name: 🧰 Install sarif-fmt
+        uses: taiki-e/install-action@7e1dca9e0c58340bd342a8aa00ad82587936018d # v2
+        with:
+          tool: sarif-fmt
+
+      - name: 🧰 Install cargo-deny
+        uses: taiki-e/install-action@7e1dca9e0c58340bd342a8aa00ad82587936018d # v2
+        with:
+          tool: cargo-deny
+
+      - name: 🔍 Clippy check
+        shell: bash
+        run: >
+          cargo clippy --no-deps --all-targets --message-format=json -- -D warnings
+          | clippy-sarif
+          | tee clippy-results.sarif
+          | sarif-fmt
+
+      - name: 🔍 Run cargo-deny
+        run: cargo deny check
 
       - name: 🔍 Check Rust source code format
         run: cargo fmt --all --check
+
+      - name: 📤 Upload analysis results to GitHub
+        if: always()
+        uses: github/codeql-action/upload-sarif@dd196fa9ce80b6bacc74ca1c32bd5b0ba22efca7 # v3
+        continue-on-error: true
+        with:
+          sarif_file: clippy-results.sarif
+          category: clippy
 
   build:
     name: Build
@@ -67,25 +94,25 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             host-target: x86_64-unknown-linux-gnu
             runner: ubuntu-latest
-            container: debian:bullseye-slim
+            container: debian:bookworm-slim
             apt-arch: amd64
 
           - target: x86_64-unknown-linux-musl
             host-target: x86_64-unknown-linux-gnu
             runner: ubuntu-latest
-            container: debian:testing-slim
+            container: debian:bookworm-slim
             apt-arch: amd64
 
           - target: aarch64-unknown-linux-gnu
             host-target: x86_64-unknown-linux-gnu
             runner: ubuntu-latest
-            container: debian:bullseye-slim
+            container: debian:bookworm-slim
             apt-arch: arm64
 
           - target: aarch64-unknown-linux-musl
             host-target: x86_64-unknown-linux-gnu
             runner: ubuntu-latest
-            container: debian:testing-slim
+            container: debian:bookworm-slim
             apt-arch: arm64
 
           - target: x86_64-pc-windows-gnu
@@ -97,13 +124,17 @@ jobs:
             runner: macos-latest
 
           - target: aarch64-apple-darwin
-            host-target: x86_64-apple-darwin
+            host-target: aarch64-apple-darwin
             runner: macos-latest
 
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
 
     container: ${{ matrix.container }}
+
+    permissions:
+      id-token: write
+      attestations: write
 
     env:
       CARGO_BUILD_TARGET: ${{ matrix.target }}
@@ -116,21 +147,6 @@ jobs:
       # https://doc.rust-lang.org/cargo/reference/unstable.html#build-std-features
       # https://github.com/rust-lang/rust/blob/4c8bb79d9f565115637cc6da739f8389e79f3a29/library/std/Cargo.toml#L54-L79
       OPTIMIZED_RELEASE_BUILD_FLAGS: -Z build-std -Z build-std-features=panic-unwind
-
-    outputs:
-      # Uglier than it needs to be because GitHub laid off the team whose
-      # responsibility was to deploy a better alternative. Talk about increased
-      # productivity... See:
-      # https://github.com/orgs/community/discussions/17245
-      # https://stackoverflow.com/questions/70287603/github-actions-dynamic-outputs-for-job-with-strategy-matrix
-      slsa-attestation-subject-hashes-x86_64-unknown-linux-gnu: ${{ steps.slsa-attestation-subjects.outputs.hashes-x86_64-unknown-linux-gnu }}
-      slsa-attestation-subject-hashes-x86_64-unknown-linux-musl: ${{ steps.slsa-attestation-subjects.outputs.hashes-x86_64-unknown-linux-musl }}
-      slsa-attestation-subject-hashes-aarch64-unknown-linux-gnu: ${{ steps.slsa-attestation-subjects.outputs.hashes-aarch64-unknown-linux-gnu }}
-      slsa-attestation-subject-hashes-aarch64-unknown-linux-musl: ${{ steps.slsa-attestation-subjects.outputs.hashes-aarch64-unknown-linux-musl }}
-      slsa-attestation-subject-hashes-x86_64-pc-windows-gnu: ${{ steps.slsa-attestation-subjects.outputs.hashes-x86_64-pc-windows-gnu }}
-      slsa-attestation-subject-hashes-x86_64-apple-darwin: ${{ steps.slsa-attestation-subjects.outputs.hashes-x86_64-apple-darwin }}
-      slsa-attestation-subject-hashes-aarch64-apple-darwin: ${{ steps.slsa-attestation-subjects.outputs.hashes-aarch64-apple-darwin }}
-      slsa-attestation-subject-hashes-universal-apple-darwin: ${{ steps.slsa-attestation-subjects.outputs.hashes-universal-apple-darwin }}
 
     # Exclude in-repo PRs from running this job
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork
@@ -152,36 +168,57 @@ jobs:
                               musl-tools musl-dev:${{ matrix.apt-arch }} \
                               markdown html2text
 
+      # This must go after the previous step so that a Git repository is checked out
+      - name: 📥 Checkout source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0 # Keep the commit history for proper version information
+
       - name: 🧰 Install Linux ARM64 cross-compilation toolchain
         if: startsWith(matrix.target, 'aarch64-unknown-linux')
         run: apt-get install -yq gcc-aarch64-linux-gnu qemu-user libc6:arm64
 
       - name: 🧰 Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1482605bfc5719782e1267fd0c0cc350fe7646b8 # v1
+        uses: dtolnay/rust-toolchain@a54c7afa936fefeb4456b2dd8068152669aa8203 # v1
         with:
           toolchain: nightly-${{ matrix.host-target }}
           targets: ${{ env.CARGO_BUILD_TARGET }}
           components: rust-src
 
-      - name: 💨 Cache Rust artifacts
-        uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84 # v2
+      - name: 💨 Set up sccache
+        if: ${{ !endsWith(matrix.target, '-pc-windows-gnu') }}
+        uses: mozilla-actions/sccache-action@054db53350805f83040bf3e6e9b8cf5a139aa7c9 # v0.0.7
+
+      - name: ⚙️ Prime sccache cache backend
+        if: ${{ !endsWith(matrix.target, '-pc-windows-gnu') }}
+        shell: bash
+        env:
+          SCCACHE_REDIS_ENDPOINT: ${{ secrets.SCCACHE_REDIS_ENDPOINT }}
+          SCCACHE_REDIS_USERNAME: ${{ secrets.SCCACHE_REDIS_USERNAME }}
+          SCCACHE_REDIS_PASSWORD: ${{ secrets.SCCACHE_REDIS_PASSWORD }}
+          SCCACHE_REDIS_KEY_PREFIX: ${{ secrets.SCCACHE_REDIS_KEY_PREFIX }}
+        run: |
+          sccache --start-server
+          echo 'RUSTC_WRAPPER=sccache' >> "$GITHUB_ENV"
+
+      - name: 💨 Cache Rust artifacts (Windows)
+        if: endsWith(matrix.target, '-pc-windows-gnu') # sccache with Windows GNU compilers is slower than trivial GHA caching
+        uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
 
       - name: 🧰 Install nextest
-        if: startsWith(matrix.target, 'x86_64-') || contains(matrix.target, '-linux-')
-        uses: taiki-e/install-action@4978b3c8549425a60eb2d68446d0b58cef63ad0a # v2
+        uses: taiki-e/install-action@7e1dca9e0c58340bd342a8aa00ad82587936018d # v2
+        env:
+          CARGO_BUILD_TARGET: ${{ matrix.host-target }}
         with:
           tool: nextest
 
       - name: 🧰 Install cargo-deb
         if: endsWith(matrix.target, '-linux-gnu')
-        uses: taiki-e/install-action@4978b3c8549425a60eb2d68446d0b58cef63ad0a # v2
+        uses: taiki-e/install-action@7e1dca9e0c58340bd342a8aa00ad82587936018d # v2
+        env:
+          CARGO_BUILD_TARGET: ${{ matrix.host-target }}
         with:
           tool: cargo-deb
-
-      - name: 📥 Checkout source
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
-        with:
-          fetch-depth: 0 # Keep the commit history for proper version information
 
       # Our build container is minimal, and it doesn't contain any systemd package.
       # systemd is responsible for setting up the machine ID files we use for
@@ -190,15 +227,12 @@ jobs:
         if: startsWith(matrix.runner, 'ubuntu')
         run: cat /proc/sys/kernel/random/uuid | tr -d '-' > /run/machine-id
 
-      - name: 📅 Gather build date and version metadata
+      # Required for the build script to be able to gather version information from Git
+      - name: 📏 Allow Git commands to run in the container directory
         shell: bash
-        run: |
-          git config --global --add safe.directory "$PWD"
-          echo "PACKSQUASH_BUILD_VERSION=$(git describe --tags --dirty=-custom --always)" >> "$GITHUB_ENV"
-          echo "PACKSQUASH_BUILD_DATE=$(date -u +%Y-%m-%d)" >> "$GITHUB_ENV"
+        run: git config --global --add safe.directory "$PWD"
 
       - name: ✔️ Run tests
-        if: startsWith(matrix.target, 'x86_64-') || contains(matrix.target, '-linux-')
         run: |
           cargo nextest run --workspace --status-level all --release
           cargo test --doc --workspace --release
@@ -212,7 +246,7 @@ jobs:
 
       - name: 📤 Upload CLI binary
         if: ${{ !contains(matrix.target, '-linux-') || endsWith(matrix.target, '-linux-musl') }}
-        uses: actions/upload-artifact@a8a3f3ad30e3422c9c7b888a15615d19a852ae32 # v3
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4
         with:
           name: PackSquash CLI executable (${{ matrix.target }})
           path: |
@@ -221,15 +255,18 @@ jobs:
 
       - name: 📤 Upload CLI Debian package
         if: endsWith(matrix.target, '-linux-gnu')
-        uses: actions/upload-artifact@a8a3f3ad30e3422c9c7b888a15615d19a852ae32 # v3
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4
         with:
           name: PackSquash CLI Debian package (${{ matrix.apt-arch }})
           path: target/${{ env.CARGO_BUILD_TARGET }}/debian/packsquash_*.deb
 
       - name: ✒️ Generate SLSA attestation subject data for binaries
-        id: slsa-attestation-subjects
-        shell: bash
-        run: echo "hashes-${{ matrix.target }}=$(shasum -b -a 256 target/${{ env.CARGO_BUILD_TARGET }}/{release,debian}/packsquash{,.exe,_*.deb} | sed -E 's/ \*(.*)$/  \1/' | tr '\n' '|')" >> "$GITHUB_OUTPUT"
+        uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v1
+        with:
+          subject-path: |
+            target/${{ env.CARGO_BUILD_TARGET }}/release/packsquash
+            target/${{ env.CARGO_BUILD_TARGET }}/release/packsquash.exe
+            target/${{ env.CARGO_BUILD_TARGET }}/debian/packsquash_*.deb
 
   build-universal-macos-binaries:
 
@@ -239,18 +276,19 @@ jobs:
 
     needs: build
 
-    outputs:
-      slsa-attestation-subjects-hashes: ${{ steps.slsa-attestation-subjects.outputs.hashes }}
+    permissions:
+      id-token: write
+      attestations: write
 
     steps:
       - name: 📥 Download PackSquash CLI x64 macOS executable
-        uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4
         with:
           name: PackSquash CLI executable (x86_64-apple-darwin)
           path: packsquash-x64
 
       - name: 📥 Download PackSquash CLI ARM64 macOS executable
-        uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4
         with:
           name: PackSquash CLI executable (aarch64-apple-darwin)
           path: packsquash-aarch64
@@ -259,15 +297,15 @@ jobs:
         run: lipo -create -output packsquash packsquash-x64/packsquash packsquash-aarch64/packsquash
 
       - name: 📤 Upload universal CLI binary
-        uses: actions/upload-artifact@a8a3f3ad30e3422c9c7b888a15615d19a852ae32 # v3
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4
         with:
           name: PackSquash CLI executable (universal-apple-darwin)
           path: packsquash
 
       - name: ✒️ Generate SLSA attestation subject data for binary
-        id: slsa-attestation-subjects
-        shell: bash
-        run: echo "hashes-universal-apple-darwin=$(shasum -b -a 256 packsquash | sed -E 's/ \*(.*)$/  \1/' | tr '\n' '|')" >> "$GITHUB_OUTPUT"
+        uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v1
+        with:
+          subject-path: packsquash
 
   build-docker-images:
 
@@ -285,14 +323,14 @@ jobs:
 
     steps:
       - name: 📥 Checkout source
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: 🧰 Set up Docker Buildx
-        uses: docker/setup-buildx-action@0d103c3126aa41d772a8362f6aa67afac040f80c # v3
+        uses: docker/setup-buildx-action@6524bf65af31da8d45b59e8c27de4bd072b392f5 # v3
 
       - name: ⚙️ Generate Docker image metadata
         id: meta
-        uses: docker/metadata-action@8e5442c4ef9f78752691e2d8f8d19755c6f78e81 # v5
+        uses: docker/metadata-action@369eb591f429131d6889c46b94e711f089e6ca96 # v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           # Tag the image as "edge" for every commit on master.
@@ -307,7 +345,7 @@ jobs:
             org.opencontainers.image.description=Docker image for PackSquash, the Minecraft resource and data pack optimizer.
 
       - name: 📥 Download PackSquash CLI x64 musl executable
-        uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4
         with:
           name: PackSquash CLI executable (x86_64-unknown-linux-musl)
 
@@ -315,7 +353,7 @@ jobs:
         run: mv packsquash packsquash-amd64
 
       - name: 📥 Download PackSquash CLI ARM64 musl executable
-        uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4
         with:
           name: PackSquash CLI executable (aarch64-unknown-linux-musl)
 
@@ -324,35 +362,44 @@ jobs:
 
       - name: 🔍 Check workflow package write permission
         id: check_write_permission
-        uses: assaferan/action-has-permission@3d96069159254de543039461dc5a9c20fadbd6e6
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        with:
+          result-encoding: string
+          script: |
+            const permission = (await github.rest.repos.getCollaboratorPermissionLevel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              username: context.actor,
+            })).data.permission;
+            return permission == "write" || permission == "admin" ? "1" : "";
 
       # The GitHub token needs the package:write permission for the push to work.
       # This permission is not given to PRs from forked repositories.
       # See: https://docs.github.com/en/actions/security-guides/automatic-token-authentication#permissions-for-the-github_token
       - name: ⚙️ Login to ${{ env.REGISTRY }}
-        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3
-        if: steps.check_write_permission.outputs.has-permission
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3
+        if: steps.check_write_permission.outputs.result
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 🔨 Build and push Docker image
-        uses: docker/build-push-action@4a13e500e55cf31b7a5d59a38ab2040ab0f42f56 # v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          push: ${{ steps.check_write_permission.outputs.has-permission == '1' }}
+          push: ${{ steps.check_write_permission.outputs.result == '1' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
   benchmark:
 
+    name: Run and upload benchmarks
+
     runs-on: ubuntu-latest
 
-    container: debian:bullseye-slim@sha256:c6d9e246479d56687c1a579a7a0336956a5ce6f2bc26bd7925b0c7405e81dbff
+    container: debian:bookworm-slim@sha256:f70dc8d6a8b6a06824c92471a1a258030836b26b043881358b967bf73de7c5ab
 
     # Benchmark failure is not critical enough to fail the whole workflow.
     # We will keep an eye on them anyway, though
@@ -370,8 +417,15 @@ jobs:
     # the repository). First-time would-be contributors need to have their workflows approved
     # anyway, but at best it might be confusing to see commits of PRs mixed with the mainline.
     # Workflows triggered by PRs don't have access to secrets either. We also ignore temporary
-    # Renovate branches to reduce noise
-    if: success() && github.event_name != 'pull_request' && !startsWith(github.ref_name, 'renovate/')
+    # Renovate branches and merge groups to reduce noise
+    if: success() &&
+      github.event_name != 'pull_request' &&
+      github.event_name != 'merge_group' &&
+      !startsWith(github.ref_name, 'renovate/')
+
+    env:
+      # Use sccache to speed up Rust compilation
+      RUSTC_WRAPPER: sccache
 
     steps:
       - name: 🧰 Install development packages and benchmark script packages
@@ -382,7 +436,7 @@ jobs:
                               python3-venv gpg
 
       - name: 📥 Checkout source
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       # Necessary for steps that invoke Git commands to work properly on workflows run on containers.
       # See: https://github.com/actions/checkout/issues/766
@@ -390,12 +444,21 @@ jobs:
         run: chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE"
 
       - name: 🧰 Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1482605bfc5719782e1267fd0c0cc350fe7646b8 # v1
+        uses: dtolnay/rust-toolchain@a54c7afa936fefeb4456b2dd8068152669aa8203 # v1
         with:
           toolchain: nightly
 
-      - name: 💨 Cache Rust artifacts
-        uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84 # v2
+      - name: 💨 Set up sccache
+        uses: mozilla-actions/sccache-action@054db53350805f83040bf3e6e9b8cf5a139aa7c9 # v0.0.7
+
+      - name: ⚙️ Prime sccache cache backend
+        shell: bash
+        env:
+          SCCACHE_REDIS_ENDPOINT: ${{ secrets.SCCACHE_REDIS_ENDPOINT }}
+          SCCACHE_REDIS_USERNAME: ${{ secrets.SCCACHE_REDIS_USERNAME }}
+          SCCACHE_REDIS_PASSWORD: ${{ secrets.SCCACHE_REDIS_PASSWORD }}
+          SCCACHE_REDIS_KEY_PREFIX: ${{ secrets.SCCACHE_REDIS_KEY_PREFIX }}
+        run: sccache --start-server
 
       - name: 📥 Download test packs dataset
         run: scripts/test-packs/download.sh
@@ -424,55 +487,3 @@ jobs:
           alert-threshold: 150%
           fail-on-alert: false
           max-items-in-chart: 50
-
-  merge-slsa-attestation-subjects-data:
-
-    name: Merge SLSA attestation subjects data
-
-    runs-on: ubuntu-latest
-
-    needs:
-      - build
-      - build-universal-macos-binaries
-
-    timeout-minutes: 5
-
-    continue-on-error: true
-
-    outputs:
-      subject-hashes: ${{ steps.merge-subjects.outputs.merged-subjects }}
-
-    steps:
-      - name: 🔗 Merge and encode attestation subject data
-        id: merge-subjects
-        shell: bash
-        run: |
-          ATTESTATION_SUBJECTS=$(cat <<'ATTESTATION_SUBJECTS' | tr -d '\n' | tr '|' '\n' | base64 -w0
-          ${{ needs.build.outputs.slsa-attestation-subject-hashes-x86_64-unknown-linux-gnu }}
-          ${{ needs.build.outputs.slsa-attestation-subject-hashes-x86_64-unknown-linux-musl }}
-          ${{ needs.build.outputs.slsa-attestation-subject-hashes-aarch64-unknown-linux-gnu }}
-          ${{ needs.build.outputs.slsa-attestation-subject-hashes-aarch64-unknown-linux-musl }}
-          ${{ needs.build.outputs.slsa-attestation-subject-hashes-x86_64-pc-windows-gnu }}
-          ${{ needs.build.outputs.slsa-attestation-subject-hashes-x86_64-apple-darwin }}
-          ${{ needs.build.outputs.slsa-attestation-subject-hashes-aarch64-apple-darwin }}
-          ${{ needs.build.outputs.slsa-attestation-subject-hashes-universal-apple-darwin }}
-          ATTESTATION_SUBJECTS
-          )
-          echo "$ATTESTATION_SUBJECTS"
-          echo "merged-subjects=$ATTESTATION_SUBJECTS" >> "$GITHUB_OUTPUT"
-
-  build-slsa-provenance:
-
-    name: Generate SLSA v1.0 build L3 provenance data
-
-    needs: merge-slsa-attestation-subjects-data
-
-    permissions:
-      contents: write
-      actions: read
-      id-token: write
-
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v1.9.0
-    with:
-      base64-subjects: ${{ needs.merge-slsa-attestation-subjects-data.outputs.subject-hashes }}
-      provenance-name: binary_provenance.intoto.jsonl
