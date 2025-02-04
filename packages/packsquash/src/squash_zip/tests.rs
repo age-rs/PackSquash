@@ -89,11 +89,12 @@ async fn add_files_finish_and_read_back_test(
 					))
 				)
 				.expect(RELATIVE_PATH_INSTANTIATION_FAILURE),
-				&mut tokio_stream::iter(std::iter::repeat(&[file_byte(i)][..]).take(file_size)),
+				&mut tokio_stream::iter(std::iter::repeat_n(&[file_byte(i)][..], file_size)),
 				skip_compression(i),
 				file_size,
 				FileListingCircumstances {
-					is_directory_listed_atlas_texture_sprite: false
+					may_be_read_and_provided_by_mods: false,
+					is_force_included: false
 				}
 			)
 			.await
@@ -341,7 +342,8 @@ async fn add_several_finish_then_reuse_and_add_works() {
 		.add_previous_file(
 			&RelativePath::from_inner("virtual/visions0.bin"),
 			FileListingCircumstances {
-				is_directory_listed_atlas_texture_sprite: false
+				may_be_read_and_provided_by_mods: false,
+				is_force_included: false
 			}
 		)
 		.await
@@ -421,7 +423,8 @@ async fn several_files_with_same_path_are_handled_properly() {
 			true,
 			1,
 			FileListingCircumstances {
-				is_directory_listed_atlas_texture_sprite: false
+				may_be_read_and_provided_by_mods: false,
+				is_force_included: false
 			}
 		)
 	};

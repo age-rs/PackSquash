@@ -2,6 +2,8 @@
 
 use std::borrow::Cow;
 use std::fmt::{Debug, Display, Formatter};
+use std::io;
+use std::io::Read;
 use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -32,7 +34,7 @@ pub fn strip_utf8_bom(buf: &[u8]) -> &[u8] {
 
 /// Checks whether the specified byte buffer begins with a byte order mark
 /// character.
-pub fn starts_with_bom<T: AsRef<[u8]>>(buf: T) -> bool {
+pub fn starts_with_bom(buf: impl AsRef<[u8]>) -> bool {
 	let buf = buf.as_ref();
 
 	buf.len() >= BOM_UTF8.len() && buf[..BOM_UTF8.len()] == BOM_UTF8
@@ -46,7 +48,7 @@ pub struct LineNumber(Option<NonZeroUsize>);
 impl LineNumber {
 	/// Creates a new line number counter that would display a line number of 1.
 	pub const fn new() -> Self {
-		Self(Some(NonZeroUsize::new(1).unwrap()))
+		Self(Some(NonZeroUsize::MIN))
 	}
 
 	/// Checks whether this line number counter would display a line number of 1
@@ -161,4 +163,31 @@ pub fn prepare_line_for_output<
 	}
 
 	Ok((description.into(), line.into_bytes()))
+}
+
+/// A read adapter that counts the total number of bytes read from the underlying reader to
+/// the specified mutable counter reference.
+pub struct AccountingRead<'count, R: Read> {
+	inner: R,
+	read_bytes: &'count mut u64
+}
+
+impl<'count, R: Read> AccountingRead<'count, R> {
+	/// Creates a new instance of this accounting read adapter.
+	pub fn new(inner: R, read_bytes: &'count mut u64) -> Self {
+		Self { inner, read_bytes }
+	}
+}
+
+impl<R: Read> Read for AccountingRead<'_, R> {
+	fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+		let read_bytes = self.inner.read(buf)?;
+
+		*self.read_bytes = self
+			.read_bytes
+			.checked_add(read_bytes as u64)
+			.ok_or(io::Error::other("Read byte count overflow"))?;
+
+		Ok(read_bytes)
+	}
 }

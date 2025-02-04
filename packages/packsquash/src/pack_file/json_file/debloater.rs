@@ -45,7 +45,7 @@ macro_rules! jsonpath_selectormuts_with_common_json_comment_keys {
 /// are encouraged to reuse instances across JSON files.
 pub(super) struct Debloater {
 	minecraft_model_bloat_selectors: OnceCell<Cell<[SelectorMut; 5]>>,
-	#[cfg(feature = "mtr3-support")]
+	#[cfg(feature = "mtr3")]
 	mtr3_train_model_bloat_selectors: OnceCell<Cell<Vec<SelectorMut>>>
 }
 
@@ -54,7 +54,7 @@ impl Debloater {
 	pub const fn new() -> Self {
 		Self {
 			minecraft_model_bloat_selectors: OnceCell::new(),
-			#[cfg(feature = "mtr3-support")]
+			#[cfg(feature = "mtr3")]
 			mtr3_train_model_bloat_selectors: OnceCell::new()
 		}
 	}
@@ -74,14 +74,14 @@ impl Debloater {
 					compile_minecraft_model_bloat_selectors
 				)
 			}
-			#[cfg(feature = "optifine-support")]
+			#[cfg(feature = "optifine")]
 			PackFileAssetType::OptifineVanillaItemModel
 			| PackFileAssetType::OptifineVanillaItemModelWithComments => debloat_value(
 				parsed_json,
 				&self.minecraft_model_bloat_selectors,
 				compile_minecraft_model_bloat_selectors
 			),
-			#[cfg(feature = "mtr3-support")]
+			#[cfg(feature = "mtr3")]
 			PackFileAssetType::Mtr3CustomTrainModel
 			| PackFileAssetType::Mtr3CustomTrainModelWithComments => debloat_value(
 				parsed_json,
@@ -101,10 +101,10 @@ impl Debloater {
 /// used to restore the inner mutability needed by the JSONPath library. The JSONPath
 /// selectors may be stored in anything that can be reference converted to a mutable
 /// slice of them.
-fn debloat_value<T: AsMut<[SelectorMut]> + Default, F: FnOnce() -> Cell<T>>(
+fn debloat_value<T: AsMut<[SelectorMut]> + Default>(
 	value: &mut Value,
 	bloat_value_selectors_cell: &OnceCell<Cell<T>>,
-	bloat_value_selectors_cell_init: F
+	bloat_value_selectors_cell_init: impl FnOnce() -> Cell<T>
 ) {
 	let bloat_value_selectors_inner_cell =
 		bloat_value_selectors_cell.get_or_init(bloat_value_selectors_cell_init);
@@ -139,8 +139,8 @@ fn compile_minecraft_model_bloat_selectors() -> Cell<[SelectorMut; 5]> {
 
 /// Compiles JSONPath selectors to remove bloat from Minecraft Transit Railway 3
 /// train model assets.
-#[cfg(feature = "mtr3-support")]
-#[doc(cfg(feature = "mtr3-support"))]
+#[cfg(feature = "mtr3")]
+#[doc(cfg(feature = "mtr3"))]
 fn compile_mtr3_train_model_bloat_selectors() -> Cell<Vec<SelectorMut>> {
 	// An array of these many selectors would be 5168 bytes big (152 bytes
 	// per selector), excluding comment keys. We don't want to put an array

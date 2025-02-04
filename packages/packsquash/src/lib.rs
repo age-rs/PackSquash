@@ -2,79 +2,66 @@
 //! which allows for efficient distribution and slightly improved load times in the game, at good speed.
 
 #![allow(incomplete_features)]
-#![deny(unsafe_code)]
-// deny instead of forbid is required by the thread_local macro with const initializers
-#![deny(unsafe_op_in_unsafe_fn)]
-#![deny(clippy::await_holding_lock)]
 #![feature(doc_cfg)]
 #![feature(if_let_guard)]
-#![feature(iter_intersperse)]
-#![feature(map_entry_replace)]
-#![feature(lazy_cell)]
-#![feature(nonzero_ops)]
-#![feature(try_find)]
 #![feature(impl_trait_in_assoc_type)]
 #![feature(generic_const_exprs)]
-#![feature(const_option)]
-#![feature(const_fn_floating_point_arithmetic)]
-#![feature(inline_const)]
-#![deny(missing_docs)]
-#![deny(rustdoc::invalid_html_tags)]
-#![deny(rustdoc::broken_intra_doc_links)]
-#![deny(rustdoc::private_intra_doc_links)]
+#![feature(lazy_get)]
+#![cfg_attr(windows, feature(windows_by_handle))]
 
+use itertools::Itertools;
 use std::borrow::Cow;
 use std::convert::Infallible;
 use std::io::ErrorKind;
 use std::panic;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use std::{io, time::SystemTime};
 
 use enumset::EnumSet;
-use futures::future;
 use futures::StreamExt;
+use futures::future;
 use thiserror::Error;
 use tokio::io::AsyncSeek;
 use tokio::io::BufReader;
-use tokio::sync::mpsc::Sender;
 use tokio::sync::Semaphore;
+use tokio::sync::mpsc::Sender;
 use tokio::{fs::File, io::AsyncRead, runtime::Builder};
 
 use config::ProcessedSquashOptions;
 use pack_meta::{PackMeta, PackMetaError};
 use squash_zip::{SquashZip, SquashZipError};
 
-use crate::config::AudioFileOptions;
-#[cfg(feature = "optifine-support")]
+#[cfg(feature = "optifine")]
 use crate::config::PropertiesFileOptions;
 use crate::config::{
-	CommandFunctionFileOptions, FileOptions, JsonFileOptions, LegacyLanguageFileOptions,
-	PngFileOptions, ShaderFileOptions, SquashOptions
-};
-use crate::pack_file::asset_type::{
-	tweak_asset_types_mask_from_global_options, PackFileAssetTypeMatcher, PackFileAssetTypeMatches
+	AudioFileOptions, CommandFunctionFileOptions, CompressedCompoundNbtTagFileOptions, FileOptions,
+	JsonFileOptions, LegacyLanguageFileOptions, PngFileOptions, ShaderFileOptions, SquashOptions
 };
 use crate::pack_file::PackFileProcessData;
+use crate::pack_file::asset_type::{
+	PackFileAssetTypeMatcher, PackFileAssetTypeMatches, tweak_asset_types_mask_from_global_options
+};
+use crate::squash_zip::PreviousZipParseError;
 pub use crate::squash_zip::relative_path::RelativePath;
-use crate::squash_zip::{system_id, PreviousZipParseError};
 use crate::vfs::{IteratorTraversalOptions, VfsPackFileIterEntry, VirtualFileSystem};
 
 pub mod config;
 pub mod vfs;
 
+mod buffered_async_spooled_temp_file;
 mod pack_file;
 mod pack_meta;
 mod squash_zip;
 mod zopfli_iterations_time_model;
 
 /// A struct that represents a resource or data pack optimization operation with configuration
-/// parameters known beforehand, which generates an output ZIP file. This is a good starting
-/// point for reading the API documentation.
+/// parameters known beforehand, which generates an output ZIP file.
 ///
-/// Once constructed, this struct can be used to run one or several optimization operations
-/// with the same configuration on any pack, in an efficient manner.
+/// This is a good starting  point for reading the API documentation. Once constructed, this
+/// struct can be used to run one or several optimization operations  with the same configuration
+/// on any pack, in an efficient manner.
 pub struct PackSquasher;
 
 impl PackSquasher {
@@ -91,7 +78,7 @@ impl PackSquasher {
 	/// parameter. Status updates of the squash operation will be sent to this channel, which the
 	/// client code can use as it deems fit.
 	///
-	/// If this function returns successfully, it is guaranteed that a output ZIP file has been
+	/// If this function returns successfully, it is guaranteed that an output ZIP file has been
 	/// generated. If it does not, it should be noted that the caller may get more information about
 	/// errors while processing particular pack files via the status updates channel, should they
 	/// happen and that information be desired.
@@ -104,9 +91,9 @@ impl PackSquasher {
 	///
 	/// Therefore, to guarantee that this method produces the expected results, the panic hook
 	/// should not be modified in any way while this method is executing.
-	pub fn run<F: VirtualFileSystem + 'static, O: TryInto<ProcessedSquashOptions>>(
+	pub fn run<O: TryInto<ProcessedSquashOptions>>(
 		&self,
-		vfs: F,
+		vfs: impl VirtualFileSystem + 'static,
 		squash_options: O,
 		pack_file_status_sender: Option<Sender<PackSquasherStatus>>
 	) -> Result<(), PackSquasherError>
@@ -132,7 +119,7 @@ impl PackSquasher {
 		}
 
 		// On Windows and Linux (and probably most other POSIX OSes), writing to a directory
-		// is an error, and we would try to do so after a maybe time consuming optimization
+		// is an error, and we would try to do so after a maybe time-consuming optimization
 		// process. Reading from a directory, at least on those platforms, is like reading from
 		// an empty file, and we would try to do that if the previous ZIP file is to be reused.
 		// Again, to avoid useless computation and help the user out, bail out early with
@@ -202,11 +189,7 @@ impl PackSquasher {
 						if !quirks.is_empty() {
 							let notice_message = format!(
 								"Working around automatically detected Minecraft quirks: {}",
-								quirks
-									.iter()
-									.map(|quirk| quirk.as_str())
-									.intersperse(", ")
-									.collect::<String>()
+								quirks.iter().map(|quirk| quirk.as_str()).join(", ")
 							);
 
 							pack_file_status_sender
@@ -343,7 +326,7 @@ impl PackSquasher {
 
 			// To shield ourselves against pack file tasks that may panic, even if they shouldn't
 			// do so, install a temporary panic hook that will register the pack file optimization
-			// as failed and then invoke the already registered hook. This will "leak" two Arc's
+			// as failed and then invoke the already registered hook. This will "leak" two `Arc`s
 			// in case we don't get to restore the previous panic hook, but if that's the case
 			// then we will propagate the panic to the caller, which will probably not care about
 			// this anyway. This "leak" lasts until the hook is set again, because the reference
@@ -465,7 +448,7 @@ impl PackSquasher {
 							Some(FileOptions::JsonFileOptions(JsonFileOptions::default())),
 							Some(FileOptions::AudioFileOptions(AudioFileOptions::default())),
 							Some(FileOptions::PngFileOptions(PngFileOptions::default())),
-							#[cfg(feature = "optifine-support")]
+							#[cfg(feature = "optifine")]
 							Some(FileOptions::PropertiesFileOptions(
 								PropertiesFileOptions::default()
 							)),
@@ -475,6 +458,9 @@ impl PackSquasher {
 							)),
 							Some(FileOptions::CommandFunctionFileOptions(
 								CommandFunctionFileOptions::default()
+							)),
+							Some(FileOptions::CompressedCompoundNbtTagFileOptions(
+								CompressedCompoundNbtTagFileOptions::default()
 							)),
 							None
 						] {
@@ -520,7 +506,7 @@ impl PackSquasher {
 			// Do not try to finish the ZIP file if something went wrong. We can't rely
 			// on a local variable that indicates whether the loop exited early because
 			// it may be finished by the time this is set to true, so do the atomic
-			// access. The ordering can't be relaxed because awaiting for a join handle
+			// access. The ordering can't be relaxed because awaiting a join handle
 			// is not documented to guarantee any synchronization (maybe the thread that
 			// ran the task is still alive in the pool)
 			if pack_file_optimization_failed.load(Ordering::Acquire) {
@@ -546,18 +532,19 @@ impl PackSquasher {
 
 			// Finally, send warnings about relevant conditions
 			if let Some(tx) = pack_file_status_sender {
-				if let Some(system_id) = system_id::get_system_id() {
-					if system_id.has_low_entropy {
+				if let Some(system_time_sanitizer) = LazyLock::get(&squash_zip::SYSTEM_TIME_SANITIZER)
+				{
+					if system_time_sanitizer.using_predictable_key() {
 						tx.send(PackSquasherStatus::Warning(
-							PackSquasherWarning::LowEntropySystemId
+							PackSquasherWarning::PredictableSystemTimeSanitizationKey
 						))
 						.await
 						.ok();
 					}
 
-					if system_id.is_volatile {
+					if system_time_sanitizer.using_volatile_key() {
 						tx.send(PackSquasherStatus::Warning(
-							PackSquasherWarning::VolatileSystemId
+							PackSquasherWarning::VolatileSystemTimeSanitizationKey
 						))
 						.await
 						.ok();
@@ -618,12 +605,12 @@ pub enum PackSquasherWarning {
 	/// are usually caused due to the system identifier changing, a previously
 	/// failed optimization process, or using different PackSquash versions.
 	UnusablePreviousZip(PreviousZipParseError),
-	/// A system identifier with low entropy was used to encrypt data, which
-	/// may render that data easier to decrypt.
-	LowEntropySystemId,
-	/// A system identifier that may change even if no targeted action by the
-	/// user to explicitly change it was done was used.
-	VolatileSystemId,
+	/// A predictable key was used to encrypt system time data, which can render
+	/// that data easier to decrypt.
+	PredictableSystemTimeSanitizationKey,
+	/// The key used to encrypt system time data may change in the future even if
+	/// no targeted action by the user to explicitly change it is done.
+	VolatileSystemTimeSanitizationKey,
 	/// The number of parallel tasks used to process pack files was limited
 	/// due to limits on the number of concurrent open file descriptors.
 	#[cfg(unix)]
@@ -670,7 +657,7 @@ impl PackFileStatus {
 
 	/// Gets the error that occurred while optimizing this file. If an error
 	/// did not happen, this returns `None`. Like the string returned by the
-	/// `optimization_strategy` method, it is user-friendly and it may change
+	/// `optimization_strategy` method, it is user-friendly, and it may change
 	/// between versions.
 	pub fn optimization_error(&self) -> Option<&str> {
 		self.optimization_error.as_deref()
@@ -693,10 +680,10 @@ impl PackFileStatus {
 /// that either the file was processed or an error occurred, so there's nothing else to do with
 /// this file for now.
 #[allow(clippy::too_many_arguments)] // Alternatives are not really more readable
-async fn match_and_process_pack_file<R: AsyncRead + AsyncSeek + Unpin>(
+async fn match_and_process_pack_file(
 	squash_options: &SquashOptions,
 	file_options: Option<FileOptions>,
-	squash_zip: &SquashZip<R>,
+	squash_zip: &SquashZip<impl AsyncRead + AsyncSeek + Unpin>,
 	vfs: &impl VirtualFileSystem,
 	asset_type_matches: &PackFileAssetTypeMatches,
 	pack_file_data: &VfsPackFileIterEntry,
@@ -765,12 +752,12 @@ async fn match_and_process_pack_file<R: AsyncRead + AsyncSeek + Unpin>(
 /// should be processed and added to it.
 ///
 /// The return value is `true` if no error occurred, and `false` if some error happened.
-async fn process_pack_file<F: AsyncRead + AsyncSeek + Unpin>(
+async fn process_pack_file(
 	pack_file_process_data: PackFileProcessData,
 	relative_path: RelativePath<'static>,
 	edit_time: Option<SystemTime>,
 	file_size_hint: u64,
-	squash_zip: &SquashZip<F>,
+	squash_zip: &SquashZip<impl AsyncRead + AsyncSeek + Unpin>,
 	pack_file_status_sender: Option<&Sender<PackSquasherStatus>>,
 	compress_already_compressed: bool
 ) -> bool {

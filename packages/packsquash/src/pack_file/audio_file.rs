@@ -17,8 +17,8 @@ use tokio_util::codec::{Decoder, FramedRead};
 use vorbis_rs::{VorbisBitrateManagementStrategy, VorbisEncoderBuilder};
 
 use crate::config::{AudioBitrateControlMode, AudioFileOptions, ChannelMixingOption};
-use crate::pack_file::asset_type::PackFileAssetType;
 use crate::pack_file::AsyncReadAndSizeHint;
+use crate::pack_file::asset_type::PackFileAssetType;
 use signal_processor::decode_and_process_sample_blocks;
 use vorbis_stream_mangler::ValidatingAndObfuscatingOggVorbisStreamMangler;
 
@@ -33,11 +33,21 @@ mod vorbis_stream_mangler;
 /// The default sampling frequency to resample positional (i.e., mono) sounds to.
 /// "Positional" sounds are named as such because the game attenuates and pans their volume
 /// depending on the 3D position of the listener, e.g. computes position effects.
-const POSITIONAL_AUDIO_SAMPLING_FREQUENCY: NonZeroU32 = NonZeroU32::new(32_000).unwrap();
+const POSITIONAL_AUDIO_SAMPLING_FREQUENCY: NonZeroU32 =
+	if let Some(frequency) = NonZeroU32::new(32_000) {
+		frequency
+	} else {
+		unreachable!()
+	};
 /// The default sampling frequency to resample non-positional (i.e., stereo) sounds to.
 /// "Non-positional" sounds are named as such because they are played at a constant volume
 /// by the game, without taking into account the position of any listeners.
-const NON_POSITIONAL_AUDIO_SAMPLING_FREQUENCY: NonZeroU32 = NonZeroU32::new(40_050).unwrap();
+const NON_POSITIONAL_AUDIO_SAMPLING_FREQUENCY: NonZeroU32 =
+	if let Some(frequency) = NonZeroU32::new(40_050) {
+		frequency
+	} else {
+		unreachable!()
+	};
 /// The default target quality for positional sounds, used when transcoding.
 const POSITIONAL_AUDIO_TARGET_QUALITY: f32 = 0.0;
 /// The default target quality for non-positional sounds, used when transcoding. For stereo,
@@ -70,15 +80,21 @@ pub enum OptimizationError {
 	Symphonia(#[from] symphonia::core::errors::Error),
 	#[error("Vorbis error: {0}")]
 	Vorbis(#[from] vorbis_rs::VorbisError),
-	#[error("Could not find a decodable audio track. Is this file in a supported format, and its extension correct?")]
+	#[error(
+		"Could not find a decodable audio track. Is this file in a supported format, and its extension correct?"
+	)]
 	NoAudioTrack,
 	#[error("Unknown or invalid channel count. Minecraft only supports mono and stereo sounds")]
 	UnsupportedChannelCount,
 	#[error("Unknown sampling frequency. Is this file corrupt?")]
 	UnknownSamplingFrequency,
-	#[error("Tried to resample from {sampling_frequency} Hz, but that frequency is too high. Please lower it")]
+	#[error(
+		"Tried to resample from {sampling_frequency} Hz, but that frequency is too high. Please lower it"
+	)]
 	InvalidSourceSamplingFrequency { sampling_frequency: NonZeroU32 },
-	#[error("Tried to resample to {sampling_frequency} Hz, but that frequency is too high. Please lower it")]
+	#[error(
+		"Tried to resample to {sampling_frequency} Hz, but that frequency is too high. Please lower it"
+	)]
 	InvalidTargetSamplingFrequency { sampling_frequency: NonZeroU32 },
 	#[error("An invalid target bitrate was specified in the options")]
 	InvalidTargetBitrate,
@@ -86,7 +102,9 @@ pub enum OptimizationError {
 	ResamplingFailure(#[from] ResampleError),
 	#[error("{0}")]
 	TwoPassOptimization(#[from] ogg_to_ogg::RemuxError),
-	#[error("The Minecraft sample count limit for audio files was exceeded. Please reduce the sampling frequency or duration")]
+	#[error(
+		"The Minecraft sample count limit for audio files was exceeded. Please reduce the sampling frequency or duration"
+	)]
 	TooLongForMinecraft,
 	#[error("I/O error: {0}")]
 	Io(#[from] std::io::Error)
@@ -160,7 +178,7 @@ impl Decoder for OptimizerDecoder {
 
 		// Second pass: run OptiVorbis on the input file, which may be transcoded by now. This
 		// is a lossless, two-pass lossless optimization step that completes pretty quickly
-		// (think on OxiPNG, but much, much faster and less quirkier)
+		// (think on OxiPNG, but much, much faster and less quirky)
 		let transcoded_and_optimized_file = if do_two_pass_optimization_and_validation {
 			ByteBuffer::CowSlice(
 				validate_and_optimize(Cursor::new(transcoded_file.as_ref()), do_ogg_obfuscation)?
@@ -230,7 +248,7 @@ fn process_and_transcode(
 			channel_mixing_done = input_channel_count != output_channel_count;
 
 			// Resampling to a frequency higher than the input one is a bad idea at
-			// this point: it doesn't add meaningful audio information or helps using
+			// this point: it doesn't add meaningful audio information or helps to use
 			// different signal processing filters, but it definitely increases space
 			// costs. Let's not do that
 			let output_sampling_frequency = cmp::min(
@@ -329,8 +347,8 @@ fn process_and_transcode(
 }
 
 /// Validates and optimizes the specified Ogg Vorbis file in two passes, using OptiVorbis.
-fn validate_and_optimize<T: Read + Seek>(
-	input_file: T,
+fn validate_and_optimize(
+	input_file: impl Read + Seek,
 	obfuscate: bool
 ) -> Result<Vec<u8>, OptimizationError> {
 	let mut too_long_for_minecraft = false;
@@ -345,6 +363,7 @@ fn validate_and_optimize<T: Read + Seek>(
 			// Beginning sample truncation is not supported by the Minecraft Vorbis decoder
 			ignore_start_sample_offset: true,
 			error_on_no_vorbis_streams: true,
+			verify_ogg_page_checksums: true,
 			vorbis_stream_mangler: ValidatingAndObfuscatingOggVorbisStreamMangler::new(
 				obfuscate,
 				&mut too_long_for_minecraft
@@ -419,6 +438,10 @@ impl<T: AsyncRead + Send + Unpin + 'static> PackFile for AudioFile<T> {
 	}
 
 	fn is_compressed(&self) -> bool {
+		true
+	}
+
+	fn may_be_read_and_provided_by_mods(&self) -> bool {
 		true
 	}
 }

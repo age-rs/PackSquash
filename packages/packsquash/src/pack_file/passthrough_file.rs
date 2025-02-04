@@ -20,7 +20,8 @@ mod tests;
 pub struct PassthroughFile<T: AsyncRead + Send + Unpin + 'static> {
 	read: T,
 	optimization_strategy_message: &'static str,
-	is_compressed: bool
+	is_compressed: bool,
+	is_force_included: bool
 }
 
 /// Passthrough decoder that always returns the bytes it receives without changes or checks.
@@ -61,6 +62,10 @@ impl<T: AsyncRead + Send + Unpin + 'static> PackFile for PassthroughFile<T> {
 	fn is_compressed(&self) -> bool {
 		self.is_compressed
 	}
+
+	fn is_force_included(&self) -> bool {
+		self.is_force_included
+	}
 }
 
 impl<T: AsyncRead + Send + Unpin + 'static> PackFileConstructor<T> for PassthroughFile<T> {
@@ -72,34 +77,39 @@ impl<T: AsyncRead + Send + Unpin + 'static> PackFileConstructor<T> for Passthrou
 		_: Self::OptimizationSettings
 	) -> Option<Self> {
 		match asset_type {
-			PackFileAssetType::TrueTypeFont => file_read_producer().map(|(read, _)| Self {
-				read,
-				optimization_strategy_message: "Copied, but might be optimized manually. \
+			PackFileAssetType::TrueTypeOrOpenTypeFont | PackFileAssetType::TrueTypeFont => {
+				file_read_producer().map(|(read, _)| Self {
+					read,
+					optimization_strategy_message: "Copied, but might be optimized manually. \
 					More information: <https://packsquash.page.link/Optimizing-TTF-fonts>",
-				is_compressed: false
-			}),
-			PackFileAssetType::FontCharacterSizes => file_read_producer().map(|(read, _)| Self {
-				read,
-				optimization_strategy_message: "Copied",
-				is_compressed: false
-			}),
-			PackFileAssetType::Text | PackFileAssetType::LegacyTextCredits => file_read_producer()
-				.map(|(read, _)| Self {
+					is_compressed: false,
+					is_force_included: false
+				})
+			}
+			// TODO: ZippedUnifontHex could be optimized by dropping any non-`.hex` file inside it
+			//       and recompressing the remaining `.hex` files with our efficient Zopfli algorithm
+			PackFileAssetType::ZippedUnifontHex
+			| PackFileAssetType::LegacyUnicodeFontCharacterSizes => {
+				file_read_producer().map(|(read, _)| Self {
 					read,
 					optimization_strategy_message: "Copied",
-					is_compressed: false
-				}),
-			// FIXME: this should have file-specific optimizations, and this is not difficult
-			// to do. This is a temporary solution for PackSquash to work with data packs
-			PackFileAssetType::NbtStructure => file_read_producer().map(|(read, _)| Self {
+					is_compressed: false,
+					is_force_included: false
+				})
+			}
+			PackFileAssetType::Text
+			| PackFileAssetType::ClosingCreditsText
+			| PackFileAssetType::LegacyTextCredits => file_read_producer().map(|(read, _)| Self {
 				read,
 				optimization_strategy_message: "Copied",
-				is_compressed: true
+				is_compressed: false,
+				is_force_included: false
 			}),
 			PackFileAssetType::Custom => file_read_producer().map(|(read, _)| Self {
 				read,
 				optimization_strategy_message: "Copied (custom asset)",
-				is_compressed: false
+				is_compressed: false,
+				is_force_included: true
 			}),
 			_ => unreachable!("Passing through unexpected asset type: {:?}", asset_type)
 		}

@@ -4,10 +4,10 @@ use std::io::IsTerminal;
 use std::os::windows::ffi::OsStrExt;
 use std::{env, io};
 
-use winapi::um::wincon::SetConsoleTitleW;
 use winapi_util::console::Console;
+use windows_sys::Win32::System::Console::SetConsoleTitleW;
 
-use super::{write_ansi_set_window_title_escape_sequence, TerminalTitleSetterTrait};
+use super::{TerminalTitleSetterTrait, write_ansi_set_window_title_escape_sequence};
 
 /// A terminal output stream.
 enum TerminalStream {
@@ -45,7 +45,7 @@ impl<'title> TerminalTitleSetterTrait<'title> for WindowsTerminalTitleSetter {
 			Some("dumb" | "unknown" | "cygwin")
 		);
 
-		// We know with more certainty that ANSI escape codes are supported if we're using an Unix-like
+		// We know with more certainty that ANSI escape codes are supported if we're using a Unix-like
 		// terminal emulator that's not known to lack support for them, or Windows Terminal
 		let terminal_emulator_supports_ansi_escape_codes =
 			terminal_emulator_might_support_ansi_escape_codes
@@ -73,7 +73,7 @@ impl<'title> TerminalTitleSetterTrait<'title> for WindowsTerminalTitleSetter {
 				// detached process.
 				// See: https://docs.microsoft.com/en-us/windows/console/creation-of-a-console
 				// When a console is available, both stdout and stderr point to it by default
-				// (IOW, both streams share the same console, so it doesn't matter what stream
+				// (IoW, both streams share the same console, so it doesn't matter what stream
 				// we choose to get the console of). But check both anyway, to handle redirections.
 				// See: https://docs.microsoft.com/en-us/windows/console/getstdhandle#remarks
 				Console::stdout().map_or_else(
@@ -84,16 +84,21 @@ impl<'title> TerminalTitleSetterTrait<'title> for WindowsTerminalTitleSetter {
 								// stderr is not associated with a console either. Give up
 								None
 							},
-							|console| {
+							|mut console| {
 								// stderr is associated with a console
-								enable_vt_processing(console)
-									.and_then(|_| Some(TerminalStream::Stderr))
+								console
+									.set_virtual_terminal_processing(true)
+									.ok()
+									.map(|_| TerminalStream::Stderr)
 							}
 						)
 					},
-					|console| {
+					|mut console| {
 						// stdout is associated with a console
-						enable_vt_processing(console).and_then(|_| Some(TerminalStream::Stdout))
+						console
+							.set_virtual_terminal_processing(true)
+							.ok()
+							.map(|_| TerminalStream::Stdout)
 					}
 				)
 			}
@@ -157,11 +162,4 @@ impl<'title> From<&'title str> for WindowsTerminalTitleString<'title> {
 	fn from(title: &'title str) -> Self {
 		Self(title, Cell::new(None))
 	}
-}
-
-/// Enables virtual terminal proccessing (i.e. ANSI escape sequence support) for
-/// the specified console. `Some(())` is returned if the VT processing mode
-/// could be enabled; otherwise, `None` is returned.
-fn enable_vt_processing(mut console: Console) -> Option<()> {
-	console.set_virtual_terminal_processing(true).ok()
 }

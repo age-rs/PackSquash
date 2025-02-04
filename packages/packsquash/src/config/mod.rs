@@ -1,6 +1,6 @@
 //! Contains the configuration options needed to create a `PackSquasher` run.
 
-use std::num::{NonZeroU16, NonZeroU32, NonZeroU8};
+use std::num::{NonZeroU8, NonZeroU16, NonZeroU32};
 use std::thread::available_parallelism;
 use std::{num::NonZeroUsize, path::PathBuf};
 
@@ -12,9 +12,11 @@ use sysinfo::{MemoryRefreshKind, RefreshKind, System};
 
 use crate::squash_zip::SquashZipSettings;
 
-/// Contains all the options that configure a `PackSquasher` operation. This is the
-/// root level configuration struct for PackSquash, so it is a good starting point
-/// to read the API documentation, after the `PackSquasher` struct.
+/// Contains all the options that configure a `PackSquasher` operation.
+///
+/// This is the root level configuration struct for PackSquash, so it is a
+/// good starting point  to read the API documentation, after the `PackSquasher`
+/// struct.
 #[derive(Clone, Deserialize)]
 pub struct SquashOptions {
 	/// The directory where the pack that will be processed resides.
@@ -54,10 +56,11 @@ impl TryFrom<SquashOptions> for ProcessedSquashOptions {
 	}
 }
 
-/// Global options that affect how the entire pack is processed. The default values for
-/// these options are meant to be the most reasonable that achieve good compression for
-/// a wide range of use cases without using protection, compression or compressibility-improving
-/// techniques that may pose interoperability problems.
+/// Global options that affect how the entire pack is processed.
+///
+/// The default values for  these options are meant to be the most reasonable that achieve good
+/// compression for  a wide range of use cases without using protection, compression or
+/// compressibility-improving techniques that may pose interoperability problems.
 #[derive(Clone, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 #[non_exhaustive]
@@ -121,7 +124,7 @@ pub struct GlobalOptions {
 	/// is stored or not depends on the value of `zip_spec_conformance`.
 	///
 	/// You might want to set this to `true` if you are concerned about the presence of encrypted
-	/// metadata in the generated ZIP files and don't care about potential speed ups in later runs.
+	/// metadata in the generated ZIP files and don't care about potential speed-ups in later runs.
 	/// In fact, if you won't run PackSquash anymore on this pack, for example because you will
 	/// distribute it to players after this run, it is recommended to set this to `true`, as this
 	/// improves compressibility a bit and removes the now unnecessary metadata.
@@ -220,8 +223,8 @@ pub struct GlobalOptions {
 	/// in the result ZIP file.
 	///
 	/// **Default value**: empty set (do not add any mod-specific files)
-	#[cfg(any(feature = "optifine-support", feature = "mtr3-support"))]
-	#[doc(cfg(any(feature = "optifine-support", feature = "mtr3-support")))]
+	#[cfg(any(feature = "optifine", feature = "mtr3"))]
+	#[doc(cfg(any(feature = "optifine", feature = "mtr3")))]
 	pub allow_mods: EnumSet<MinecraftMod>,
 	/// The output file path where the result ZIP will be written to. This path must not point to a
 	/// folder.
@@ -253,7 +256,7 @@ pub struct GlobalOptions {
 impl Default for GlobalOptions {
 	fn default() -> Self {
 		let available_memory = System::new_with_specifics(
-			RefreshKind::new().with_memory(MemoryRefreshKind::new().with_ram())
+			RefreshKind::nothing().with_memory(MemoryRefreshKind::nothing().with_ram())
 		)
 		.available_memory();
 
@@ -272,7 +275,7 @@ impl Default for GlobalOptions {
 			work_around_minecraft_quirks: EnumSet::empty(),
 			automatic_asset_types_mask_detection: true,
 			ignore_system_and_hidden_files: true,
-			#[cfg(any(feature = "optifine-support", feature = "mtr3-support"))]
+			#[cfg(any(feature = "optifine", feature = "mtr3"))]
 			allow_mods: EnumSet::empty(),
 			threads: hardware_threads,
 			output_file_path: PathBuf::from("pack.zip"),
@@ -431,11 +434,11 @@ pub enum MinecraftQuirk {
 	/// textures to a palette, which includes color quantization, as it is used to generate
 	/// a palette. This incurs some space costs.
 	RestrictiveBannerLayerTextureFormatCheck,
-	/// All currently known Minecraft versions overlay entity layer textures in a way that
-	/// does not account for transparency properly, by taking into account their color and
-	/// not only their transparency values as blending coefficients to use for overlying
-	/// that texture. PackSquash can change the color of transparent pixels, and as such it
-	/// can trigger this behavior.
+	/// All known Minecraft versions before snapshot 24w39a (1.12.2) overlay entity layer
+	/// textures in a way that  does not account for transparency properly, by taking into
+	/// account their color and not only their transparency values as blending coefficients
+	/// to use for overlying that texture. PackSquash can change the color of transparent
+	/// pixels, and as such it can trigger this behavior.
 	///
 	/// This workaround stops PackSquash from changing the color of transparent pixels and
 	/// quantizing the pixels to a palette to reduce texture file size, as both optimizations
@@ -455,17 +458,25 @@ pub enum MinecraftQuirk {
 	/// ZIP specification conformance level is not used, or if the Minecraft client is run
 	/// using newer Java versions.
 	Java8ZipParsing,
-	/// The audio decoding code of the latest Minecraft versions, from 1.14 onwards, was
-	/// refactored in such a way that the PackSquash Ogg Vorbis obfuscation techniques were
-	/// made possible. Older Minecraft versions do not support these obfuscated files, showing
-	/// errors in the console and freezing the game when they are played.
+	/// The audio decoding code of a range of Minecraft versions, from 1.14 to 24w14a (1.20.5
+	/// snapshot), both inclusive, made possible the PackSquash Ogg Vorbis obfuscation techniques.
+	/// Older and newer Minecraft versions do not support these obfuscated files, showing errors
+	/// in the console and even freezing the game when they are played.
 	///
 	/// This workaround ensures that no obfuscation is done to any Ogg Vorbis file generated
 	/// by PackSquash, so at least the pack will work. Keep in mind that, due to 1.13 and
 	/// 1.14 sharing the same pack format version, the autodetection code for this quirk will
 	/// err on the safe side and only consider Minecraft versions starting from 1.15 to be
-	/// compatible.
-	OggObfuscationIncompatibility
+	/// compatible. Likewise, the quirk will also be applied to Minecraft versions beginning from
+	/// 24w13a, two snapshots before the incompatibility was really introduced.
+	OggObfuscationIncompatibility,
+	/// The PNG decoding code of all known Minecraft versions since resource packs were introduced
+	/// until 1.13 did not support the PackSquash PNG obfuscation techniques, causing the game to
+	/// show errors when the affected textures were loaded.
+	///
+	/// This workaround ensures that no obfuscation is done to any PNG file generated by PackSquash,
+	/// so at least the pack will work.
+	PngObfuscationIncompatibility
 }
 
 impl MinecraftQuirk {
@@ -479,7 +490,8 @@ impl MinecraftQuirk {
 				"bad_entity_eye_layer_texture_transparency_blending"
 			}
 			Self::Java8ZipParsing => "java8_zip_parsing",
-			Self::OggObfuscationIncompatibility => "ogg_obfuscation_incompatibility"
+			Self::OggObfuscationIncompatibility => "ogg_obfuscation_incompatibility",
+			Self::PngObfuscationIncompatibility => "png_obfuscation_incompatibility"
 		}
 	}
 }
@@ -488,8 +500,8 @@ impl MinecraftQuirk {
 #[derive(Deserialize, Serialize, EnumSetType)]
 #[enumset(serialize_deny_unknown, serialize_repr = "list")]
 #[non_exhaustive]
-#[cfg(any(feature = "optifine-support", feature = "mtr3-support"))]
-#[doc(cfg(any(feature = "optifine-support", feature = "mtr3-support")))]
+#[cfg(any(feature = "optifine", feature = "mtr3"))]
+#[doc(cfg(any(feature = "optifine", feature = "mtr3")))]
 pub enum MinecraftMod {
 	/// OptiFine.
 	///
@@ -497,16 +509,16 @@ pub enum MinecraftMod {
 	/// - Properties files (`.properties`).
 	/// - Custom entity model files (`.jem`, `.jemc`, `.jpm` and `.jpmc`).
 	#[serde(rename = "OptiFine")]
-	#[cfg(feature = "optifine-support")]
-	#[doc(cfg(feature = "optifine-support"))]
+	#[cfg(feature = "optifine")]
+	#[doc(cfg(feature = "optifine"))]
 	Optifine,
 	/// Minecraft Transit Railway, version 3.0 and compatibles.
 	///
 	/// Currently, this adds support for the following file types:
 	/// - Blockbench modded entity model projects for custom train models (`.bbmodel` and `.bbmodelc`).
 	#[serde(rename = "Minecraft Transit Railway 3")]
-	#[cfg(feature = "mtr3-support")]
-	#[doc(cfg(feature = "mtr3-support"))]
+	#[cfg(feature = "mtr3")]
+	#[doc(cfg(feature = "mtr3"))]
 	MinecraftTransitRailway3
 }
 
@@ -534,8 +546,8 @@ pub enum FileOptions {
 	ShaderFileOptions(ShaderFileOptions),
 	/// Options that influence how property files are converted to a more distribution-friendly
 	/// representation.
-	#[cfg(feature = "optifine-support")]
-	#[doc(cfg(feature = "optifine-support"))]
+	#[cfg(feature = "optifine")]
+	#[doc(cfg(feature = "optifine"))]
 	PropertiesFileOptions(PropertiesFileOptions),
 	/// Options that influence how legacy language files are converted to a more
 	/// distribution-friendly representation.
@@ -543,6 +555,9 @@ pub enum FileOptions {
 	/// Options that influence how command function files are converted to a more
 	/// distribution-friendly representation.
 	CommandFunctionFileOptions(CommandFunctionFileOptions),
+	/// Options that influence how compressed compound NBT tag files are converted to a more
+	/// distribution-friendly representation.
+	CompressedCompoundNbtTagFileOptions(CompressedCompoundNbtTagFileOptions),
 	/// Options that influence how custom files that the user explicitly wants to include in the
 	/// pack are processed.
 	// For better style, keep this variant last
@@ -566,6 +581,9 @@ impl FileOptions {
 			file_options.working_around_transparent_pixel_colors_change_quirk = global_options
 				.work_around_minecraft_quirks
 				.contains(MinecraftQuirk::BadEntityEyeLayerTextureTransparencyBlending);
+			file_options.minecraft_version_supports_png_obfuscation = !global_options
+				.work_around_minecraft_quirks
+				.contains(MinecraftQuirk::PngObfuscationIncompatibility);
 		}
 
 		if let FileOptions::AudioFileOptions(file_options) = &mut self {
@@ -578,7 +596,7 @@ impl FileOptions {
 	}
 }
 
-/// Parameters that influence how a audio file is optimized.
+/// Parameters that influence how an audio file is optimized.
 #[derive(Deserialize, Clone, Copy)]
 #[serde(default, deny_unknown_fields)]
 #[non_exhaustive]
@@ -631,7 +649,7 @@ pub struct AudioFileOptions {
 	/// **Default value**: `0.25` for stereo audio (interpreted as a quality factor, ≈68 kbit/s for
 	/// stereo, 44.1 kHz audio) and `0.0` for mono audio, interpreted as quality factors
 	pub target_bitrate_control_metric: Option<f32>,
-	/// The sampling frequency that the audio will be resampled to, in Hz. Downsampling helps saving
+	/// The sampling frequency that the audio will be resampled to, in Hz. Downsampling helps to save
 	/// space, at the cost of potentially introducing aliasing artifacts if the input audio contains
 	/// frequencies higher than half the new sampling rate and narrowing margins for filters and
 	/// further signal processing work. If the specified sampling frequency is higher than the
@@ -644,7 +662,7 @@ pub struct AudioFileOptions {
 	/// commands like `/playsound`.
 	///
 	/// This option is mainly useful to make sound ripping harder. If you're just looking into
-	/// saving space by making the audio faster (as it has less samples and is shorter) and
+	/// saving space by making the audio faster (as it has fewer samples and is shorter) and
 	/// then speeding it up in Minecraft, it's better to just change the sampling frequency,
 	/// which results in homologous quality and space tradeoffs.
 	///
@@ -714,7 +732,7 @@ pub enum AudioBitrateControlMode {
 	///
 	/// Some advantages of this bitrate control mode include:
 	/// - It adapts well to different sampling frequencies and channel counts: the encoder knows
-	///   that it requires less bits to encode mono signals than stereo signals at the same quality
+	///   that it requires fewer bits to encode mono signals than stereo signals at the same quality
 	///   level, for example.
 	/// - Unlike with bitrates, it's not possible to ask for too high or low quality levels.
 	/// - Easy to encode audio segments are stored in minimal space, with consistent quality: there
@@ -831,7 +849,7 @@ pub struct JsonFileOptions {
 	#[serde(rename = "delete_bloat_keys")]
 	pub delete_bloat: bool,
 	/// If `true`, PackSquash will allow comments in JSON files whose usual extension does not end
-	/// with an extra `c` letter, which explicitly marks the file as following a extended JSON
+	/// with an extra `c` letter, which explicitly marks the file as following an extended JSON
 	/// format that can contain comments. If `false`, comments will only be allowed in JSON files
 	/// with those specific extensions.
 	///
@@ -864,8 +882,8 @@ pub struct PngFileOptions {
 	/// different parameters better suited for image compression.
 	///
 	/// When the number of compression iterations drops to zero, which happens when this option
-	/// is set to zero or the texture is pretty big, a much more faster DEFLATE compression
-	/// algorithm is used instead of Zopfli. This extra performance may come at the cost of file
+	/// is set to zero or the texture is pretty big, a much faster DEFLATE compression algorithm
+	/// is used instead of Zopfli. This extra performance may come at the cost of file
 	/// size. On the other side, the number of iterations is limited to a maximum of 15. Values
 	/// greater than 15 are still useful for this setting, because they change the threshold
 	/// where iterations start being reduced in order to keep acceptable performance levels.
@@ -901,7 +919,7 @@ pub struct PngFileOptions {
 	/// **Default value**: `0.85`
 	pub color_quantization_dithering_level: UnitIntervalFloat,
 	/// The maximum width and height of the images that will be accepted. This parameter
-	/// sets a high bound of memory usage by PackSquash and helps authoring packs with
+	/// sets a high bound of memory usage by PackSquash and helps to author packs with
 	/// reasonable texture sizes.
 	///
 	/// **Default value**: 8192
@@ -924,24 +942,12 @@ pub struct PngFileOptions {
 	///
 	/// **Default value**: `false`
 	pub downsize_if_single_color: bool,
-	/// Controls whether PackSquash should assume that this texture may be stitched by the game as
-	/// a part of an internal or custom atlas that is directory-listed. For performance reasons,
-	/// Minecraft stitches most game textures into atlases, including those of item and block models,
-	/// but there are a few exceptions, such as main menu panorama textures, or those sampled
-	/// directly from shaders.
+	/// If `true`, the generated PNG files will be mangled in a way so that they will be harder to
+	/// view outside of Minecraft. The obfuscation technique used is not robust against some
+	/// scenarios or expert knowledge, but it does not increase file size.
 	///
-	/// Currently, this option only affects how PackSquash protects images when
-	/// [`size_increasing_zip_obfuscation`](GlobalOptions::size_increasing_zip_obfuscation) is in
-	/// effect. `true` is a safe default value that causes textures to be less protected. Setting
-	/// it to `false` for better protection is, however, only recommended if you have detailed
-	/// knowledge of how the game stitches textures and are willing to test the correctness of this
-	/// assumption on a case-by-case basis.
-	///
-	/// This option may be changed in the future to have more side effects. It may also be removed,
-	/// depending on how PackSquash improves its atlas texture detection capabilities.
-	///
-	/// **Default value**: `true`
-	pub may_be_directory_listed_atlas_sprite: bool,
+	/// **Default value**: `false`
+	pub png_obfuscation: bool,
 	/// Crate-private option set by the [MinecraftQuirk::GrayscaleImagesGammaMiscorrection]
 	/// workaround to not reduce color images to grayscale.
 	///
@@ -959,7 +965,13 @@ pub struct PngFileOptions {
 	///
 	/// **Default value**: `false`
 	#[serde(skip)]
-	pub(crate) working_around_transparent_pixel_colors_change_quirk: bool
+	pub(crate) working_around_transparent_pixel_colors_change_quirk: bool,
+	/// Crate-private option set by the [MinecraftQuirk::PngObfuscationIncompatibility]
+	/// workaround to not obfuscate PNG files.
+	///
+	/// **Default value**: `true`
+	#[serde(skip)]
+	pub(crate) minecraft_version_supports_png_obfuscation: bool
 }
 
 impl Default for PngFileOptions {
@@ -971,10 +983,11 @@ impl Default for PngFileOptions {
 			maximum_width_and_height: NonZeroU16::new(8192).unwrap(),
 			skip_alpha_optimizations: false,
 			downsize_if_single_color: false,
-			may_be_directory_listed_atlas_sprite: true,
+			png_obfuscation: false,
 			working_around_grayscale_reduction_quirk: false,
 			working_around_color_type_change_quirk: false,
-			working_around_transparent_pixel_colors_change_quirk: false
+			working_around_transparent_pixel_colors_change_quirk: false,
+			minecraft_version_supports_png_obfuscation: true
 		}
 	}
 }
@@ -1175,15 +1188,44 @@ impl Default for CommandFunctionFileOptions {
 	}
 }
 
-/// Parameters that influence how a properties file is optimized.
-///
-/// These files are only supported if PackSquash was compiled with OptiFine mod support. Otherwise,
-/// these parameters are read and parsed but ignored afterwards.
+/// Parameters that influence how a compressed compound NBT tag file is optimized.
 #[derive(Deserialize, Clone, Copy)]
 #[serde(default, deny_unknown_fields)]
 #[non_exhaustive]
-#[cfg(feature = "optifine-support")]
-#[doc(cfg(feature = "optifine-support"))]
+pub struct CompressedCompoundNbtTagFileOptions {
+	/// The number of Zopfli compression iterations that PackSquash will do to compress raw NBT data
+	/// that amounts to a magnitude of 1 MiB. This option is similar to `zip_compression_iterations`,
+	/// and is used to feed the same linear model, but with different parameters better suited for
+	/// NBT data compression.
+	///
+	/// When the number of compression iterations drops to zero, which happens when this option is
+	/// set to zero or the NBT file is pretty big, a faster Gzip compression algorithm that is likely
+	/// to generate bigger files will be used. On the other side, the number of iterations is limited
+	/// to a maximum of 20. Values greater than 20 are still useful for this setting, because they
+	/// change the threshold where iterations start being reduced in order to keep acceptable
+	/// performance levels.
+	///
+	/// **Default value**: `15`
+	pub nbt_compression_iterations: u8
+}
+
+impl Default for CompressedCompoundNbtTagFileOptions {
+	fn default() -> Self {
+		Self {
+			nbt_compression_iterations: 15
+		}
+	}
+}
+
+/// Parameters that influence how a properties file is optimized.
+///
+/// These files are only supported if PackSquash was compiled with OptiFine mod support. Otherwise,
+/// these parameters are read and parsed but ignored afterward.
+#[derive(Deserialize, Clone, Copy)]
+#[serde(default, deny_unknown_fields)]
+#[non_exhaustive]
+#[cfg(feature = "optifine")]
+#[doc(cfg(feature = "optifine"))]
 pub struct PropertiesFileOptions {
 	/// If `true`, the properties file will be minified (i.e. unnecessary white space, line breaks
 	/// and comments will be removed) to save space and improve parsing performance. If `false`,
@@ -1194,7 +1236,7 @@ pub struct PropertiesFileOptions {
 	pub minify: bool
 }
 
-#[cfg(feature = "optifine-support")]
+#[cfg(feature = "optifine")]
 impl Default for PropertiesFileOptions {
 	fn default() -> Self {
 		Self { minify: true }

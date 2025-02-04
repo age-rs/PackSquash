@@ -3,15 +3,16 @@
 use crate::config::ColorQuantizationTarget;
 use crate::zopfli_iterations_time_model::ZopfliIterationsTimeModel;
 use bytes::BytesMut;
-use imagequant::{liq_error, Attributes};
+use imagequant::{Attributes, liq_error};
 use itertools::Itertools;
-use oxipng::{indexset, BitDepth, ColorType, Deflaters, Options, RowFilter, StripChunks};
+use obfstr::random;
+use oxipng::{BitDepth, ColorType, Deflaters, Options, RowFilter, StripChunks, indexset};
 use rgb::{AsPixels, RGBA8};
 use spng::{ContextFlags, DecodeFlags, Format};
+use std::cmp;
 use std::io::Read;
-use std::num::{NonZeroU16, NonZeroU8};
+use std::num::{NonZeroU8, NonZeroU16};
 use std::time::Duration;
-use std::{cmp, iter};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -51,7 +52,7 @@ pub fn strip_unnecessary_chunks(
 	// The format of PNG files is dead simple: just a signature in the beginning
 	// followed by as many chunks as desired. OxiPNG supports stripping chunks,
 	// but it's amazing that implementing this ourselves takes barely the same
-	// LOC than calling OxiPNG with the suitable options, and that there is no
+	// LOC as calling OxiPNG with the suitable options, and that there is no
 	// nice library at crates.io to do this simple optimization. OxiPNG is also
 	// not really meant to do this single thing as fast as possible. So do it
 	// ourselves and strip every chunk that we know won't be of any use.
@@ -118,6 +119,48 @@ pub fn strip_unnecessary_chunks(
 	}
 
 	Ok(stripped_png)
+}
+
+/// Obfuscates the given known-valid PNG datastream in place to make it less likely to be readable
+/// by most decoders.
+///
+/// # Panics
+/// This function assumes that the input PNG datastream is valid and may panic if the PNG data is
+/// malformed.
+pub fn obfuscate_png(png: &mut [u8]) {
+	const CRC32_KEY: u32 = {
+		let k = random!(u32);
+
+		if k == 0 { 0xCAFEBABE } else { k }
+	};
+	const ADLER32_KEY: u32 = {
+		let k = random!(u32);
+
+		if k == 0 { 0xCAFEBABE } else { k }
+	};
+
+	let mut i = 8;
+	while i < png.len() {
+		let data_length = u32::from_be_bytes(png[i..i + 4].try_into().unwrap()) as usize;
+		let chunk_type = &png[i + 4..i + 8];
+		let chunk_crc = i + 8 + data_length;
+
+		if chunk_type == b"IDAT" {
+			// The chunk data is a Zlib stream
+			for (adler32_byte, key_byte) in png[chunk_crc - 4..]
+				.iter_mut()
+				.zip(ADLER32_KEY.to_le_bytes())
+			{
+				*adler32_byte ^= key_byte;
+			}
+		}
+
+		for (crc32_byte, key_byte) in png[chunk_crc..].iter_mut().zip(CRC32_KEY.to_le_bytes()) {
+			*crc32_byte ^= key_byte;
+		}
+
+		i = chunk_crc + 4;
+	}
 }
 
 /// An in-memory rectangular array of pixels in 8-bit RGBA format,
@@ -291,7 +334,6 @@ impl<R: Read> ProcessedImage<R> {
 		let mut quantization_attributes = Attributes::new();
 		quantization_attributes.set_max_colors(quantization_target.max_colors())?;
 		quantization_attributes.set_speed(2)?;
-		quantization_attributes.set_quality(0, 100)?;
 
 		let bitmap = if let Some(pixel_array) = self.as_pixel_array()? {
 			pixel_array.as_slice()
@@ -366,13 +408,13 @@ impl<R: Read> ProcessedImage<R> {
 				PixelArray {
 					width: minimum_mipmap_level_keeping_dimension,
 					height: minimum_mipmap_level_keeping_dimension,
-					buf: iter::repeat(pixels[0])
-						.take(
-							minimum_mipmap_level_keeping_dimension.get() as usize
-								* minimum_mipmap_level_keeping_dimension.get() as usize
-						)
-						.flat_map(|pixel| <RGBA8 as Into<[u8; 4]>>::into(pixel).into_iter())
-						.collect()
+					buf: std::iter::repeat_n(
+						pixels[0],
+						minimum_mipmap_level_keeping_dimension.get() as usize
+							* minimum_mipmap_level_keeping_dimension.get() as usize
+					)
+					.flat_map(|pixel| <RGBA8 as Into<[u8; 4]>>::into(pixel).into_iter())
+					.collect()
 				}
 				.into()
 			})

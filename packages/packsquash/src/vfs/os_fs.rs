@@ -165,12 +165,14 @@ mod tests {
 
 		let mut file_count = 0;
 		for file in file_iter {
-			assert!(RELATIVE_PATHS.contains(
-				&file
-					.expect("I/O operations are assumed not to fail during tests")
-					.relative_path
-					.as_str()
-			));
+			assert!(
+				RELATIVE_PATHS.contains(
+					&file
+						.expect("I/O operations are assumed not to fail during tests")
+						.relative_path
+						.as_str()
+				)
+			);
 
 			file_count += 1;
 		}

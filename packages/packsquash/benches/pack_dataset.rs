@@ -1,12 +1,12 @@
 //! Contains the definition of the pack dataset struct.
 
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::{HashMap, hash_map::Entry};
 use std::fs::File;
 use std::io;
 use std::path::Path;
 
 use tar::Archive;
-use tempfile::{tempdir, TempDir};
+use tempfile::{TempDir, tempdir};
 use xz2::read::XzDecoder;
 
 /// Represents a pack dataset, which provides access to packs in the dataset.
@@ -17,6 +17,7 @@ pub struct PackDataset<'path> {
 impl<'path> PackDataset<'path> {
 	/// Creates a new pack dataset.
 	#[allow(clippy::new_without_default)]
+	#[must_use]
 	pub fn new() -> Self {
 		Self {
 			extracted_packs: HashMap::new()
@@ -33,9 +34,9 @@ impl<'path> PackDataset<'path> {
 	/// ```
 	/// $ tar -cJf packages/packsquash/benches/data/packs/pack.tar.xz --exclude-vcs -C /tmp/pack .
 	/// ```
-	pub fn get<P: AsRef<Path> + ?Sized>(
+	pub fn get(
 		&mut self,
-		relative_path: &'path P
+		relative_path: &'path (impl AsRef<Path> + ?Sized)
 	) -> Result<&TempDir, io::Error> {
 		match self.extracted_packs.entry(relative_path.as_ref()) {
 			Entry::Occupied(entry) => Ok(entry.into_mut()),

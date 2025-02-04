@@ -3,17 +3,17 @@
 
 use std::time::{Duration, SystemTime, SystemTimeError};
 
-use aes::cipher::generic_array::GenericArray;
 use aes::{
-	cipher::{BlockCipher, BlockEncrypt, KeyInit},
-	Aes128, Block
+	Aes256,
+	cipher::{BlockCipher, BlockEncrypt}
 };
-use const_random::const_random;
 
+use super::system_id::get_or_compute_system_ids;
 use fpe::ff1::{BinaryNumeralString, FF1};
+use hkdf::Hkdf;
+use obfstr::random;
+use sha2::Sha256;
 use thiserror::Error;
-
-use super::system_id::get_or_compute_system_id;
 
 #[cfg(test)]
 mod tests;
@@ -42,37 +42,77 @@ pub enum SystemTimeSanitizationError {
 // If you're trying to reverse the sanitized format, please consider whether doing
 // so is really worth your time and that PackSquash developers made it harder for
 // you because pack files modification dates are intended to be private.
-pub(super) struct SystemTimeSanitizer<C: BlockCipher + BlockEncrypt + Clone> {
-	ff1_cipher: FF1<C>
+pub struct SystemTimeSanitizer<C: BlockCipher + BlockEncrypt + Clone> {
+	ff1_cipher: FF1<C>,
+	cipher_key_is_volatile: bool,
+	cipher_key_is_predictable: bool
 }
 
 /// An application-wide salt that is used for time sanitization.
 ///
-/// This salt may be deterministically generated via the `CONST_RANDOM_SEED`
+/// This salt may be deterministically generated via the `OBFSTR_SEED`
 /// environment variable on build time. A good way to generate a 512-bit
 /// seed on a Linux system with GNU Coreutils is:
 ///
 /// ```bash
 /// $ dd if=/dev/urandom bs=1 count=64 2>/dev/null | base64 -w 0
 /// ```
-const TIME_SANITIZATION_SALT: [u8; 16] = const_random!(u128).to_le_bytes();
+#[rustfmt::skip] // array::from_fn is not const and rustfmt turns this into one macro per line
+const TIME_SANITIZATION_SALT: [u8; 32] = [
+	random!(u8), random!(u8), random!(u8), random!(u8), random!(u8), random!(u8), random!(u8), random!(u8),
+	random!(u8), random!(u8), random!(u8), random!(u8), random!(u8), random!(u8), random!(u8), random!(u8),
+	random!(u8), random!(u8), random!(u8), random!(u8), random!(u8), random!(u8), random!(u8), random!(u8),
+	random!(u8), random!(u8), random!(u8), random!(u8), random!(u8), random!(u8), random!(u8), random!(u8),
+];
 
 /// A 32-bit unsigned integer with the MSB set.
 const STICK_PARITY_BIT_MASK: u32 = 1 << 31;
 
-impl SystemTimeSanitizer<Aes128> {
+impl SystemTimeSanitizer<Aes256> {
 	/// Creates a new system time sanitizer that uses AES-128 in CBC mode as its
-	/// underlying cipher.
+	/// underlying cipher. The key used for encryption is derived by key stretching
+	/// system IDs with an application-wide salt, extracting all the available
+	/// entropy from them.
 	pub(super) fn new() -> Self {
-		// Now generate the actual encryption key by encrypting the system-specific
-		// system ID with our application-wide salt. This makes it much harder to
-		// derive the system ID from the ciphertext, even if we know the salt
-		let mut key = get_or_compute_system_id().id.to_le_bytes();
-		Aes128::new(GenericArray::from_slice(&TIME_SANITIZATION_SALT))
-			.encrypt_block(Block::from_mut_slice(&mut key));
+		let system_ids = get_or_compute_system_ids();
+		let mut persistent_system_ids = system_ids
+			.iter()
+			.filter(|&system_id| !system_id.is_volatile)
+			.peekable();
+
+		// We want the key material to be deterministic between runs, so filter
+		// volatile system IDs out, unless they're all we have
+		let (key_material, cipher_key_is_volatile) = if persistent_system_ids.peek().is_some() {
+			(
+				persistent_system_ids
+					.flat_map(|system_id| &system_id.id)
+					.copied()
+					.collect::<Vec<_>>(),
+				false
+			)
+		} else {
+			(
+				system_ids
+					.iter()
+					.flat_map(|system_id| &system_id.id)
+					.copied()
+					.collect(),
+				true
+			)
+		};
+
+		// 14 bytes of material is a somewhat conservative threshold set by NIST for key size:
+		// https://csrc.nist.gov/CSRC/media/Projects/Lightweight-Cryptography/documents/final-lwc-submission-requirements-august2018.pdf
+		let cipher_key_is_predictable = key_material.len() < 14;
+
+		let kdf = Hkdf::<Sha256>::new(Some(&TIME_SANITIZATION_SALT), &key_material);
+		let mut key = [0; 32];
+		kdf.expand(&[], &mut key).unwrap();
 
 		Self {
-			ff1_cipher: FF1::<Aes128>::new(&key, 2).unwrap()
+			ff1_cipher: FF1::<Aes256>::new(&key, 2).unwrap(),
+			cipher_key_is_volatile,
+			cipher_key_is_predictable
 		}
 	}
 }
@@ -88,7 +128,7 @@ impl<C: BlockCipher + BlockEncrypt + Clone> SystemTimeSanitizer<C> {
 		tweak: &[u8]
 	) -> Result<[u8; 4], SystemTimeSanitizationError> {
 		// Squash Time is defined as the count of half-seconds since Monday, 22 December 2014
-		// 0:00:00 (UTC), as adjustements to the Unix time, following the formula
+		// 0:00:00 (UTC), as adjustments to the Unix time, following the formula
 		// squash_time = (ms_unix_time - squash_epoch) / 500.
 		// With 31 bits to store the magnitude, timestamps up to Wednesday, 30 December 2048
 		// 13:37:03 (UTC) can be represented, which is better than 32-bit, second-precision
@@ -148,9 +188,25 @@ impl<C: BlockCipher + BlockEncrypt + Clone> SystemTimeSanitizer<C> {
 		}
 
 		// Convert Squash Time back to Unix time, in ms. The result value
-		// needs at most 42 bits, so it fits nicely in a 64 bit integer
+		// needs at most 42 bits, so it fits nicely in a 64-bit integer
 		let ms_unix_time = 500 * squash_time as u64 + 1419206400000;
 
 		Ok(SystemTime::UNIX_EPOCH + Duration::from_millis(ms_unix_time))
+	}
+
+	/// Returns whether the sanitizer cipher is using a volatile key.
+	///
+	/// Volatile keys are those derived from a set of system IDs where at least one
+	/// is volatile, meaning that it can change between runs, and thus the key.
+	pub fn using_volatile_key(&self) -> bool {
+		self.cipher_key_is_volatile
+	}
+
+	/// Returns whether the sanitizer cipher is using a predictable key.
+	///
+	/// Predictable keys are those derived from an empty set of system IDs, or where
+	/// their concatenation to produce key material is less than 14 bytes long.
+	pub fn using_predictable_key(&self) -> bool {
+		self.cipher_key_is_predictable
 	}
 }

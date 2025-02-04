@@ -1,13 +1,13 @@
-use futures::{future, StreamExt};
+use futures::{StreamExt, future};
 use thiserror::Error;
 use tokio::io::AsyncRead;
 use tokio_stream::Stream;
 use tokio_util::codec::{FramedRead, LinesCodec, LinesCodecError};
 
 use crate::config::CommandFunctionFileOptions;
-use crate::pack_file::asset_type::PackFileAssetType;
-use crate::pack_file::util::{prepare_line_for_output, LineNumber, MarkLastDecorator, BOM};
 use crate::pack_file::AsyncReadAndSizeHint;
+use crate::pack_file::asset_type::PackFileAssetType;
+use crate::pack_file::util::{BOM, LineNumber, MarkLastDecorator, prepare_line_for_output};
 
 use super::{OptimizedBytesChunk, PackFile, PackFileConstructor};
 
@@ -98,8 +98,8 @@ impl<T: AsyncRead + Send + Unpin + 'static> PackFileConstructor<T> for CommandFu
 /// Processes the specified line of text, returning an optimized bytes chunk with its optimized
 /// representation. `None` is returned to signal that the line should not be copied to the output
 /// file at all.
-fn process_line<L: Into<String>>(
-	line: L,
+fn process_line(
+	line: impl Into<String>,
 	is_last: bool,
 	line_number: LineNumber,
 	minify: bool
@@ -114,7 +114,7 @@ fn process_line<L: Into<String>>(
 	// the first line if present. This fixes problems derived from empty or comment
 	// lines being parsed as commands instead, and commands being parsed with a strange
 	// character in the beginning, in addition of saving space
-	if line_number.is_first() && line.chars().next().map_or(false, |c| c == BOM) {
+	if line_number.is_first() && line.starts_with(BOM) {
 		line.remove(0);
 	}
 

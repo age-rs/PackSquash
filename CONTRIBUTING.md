@@ -66,7 +66,7 @@ contributions:
   results of that research, in the form of ideas, documents, or proofs of
   concept.
 - Sharing packs that are useful for developers to analyze to improve PackSquash.
-  For example, packs that were protected with techniques different than those of
+  For example, packs that were protected with techniques different from those of
   PackSquash, or that have a distribution of assets that highlights a problem or
   exhibits interesting performance characteristics.
 - Writing or reviewing code that fixes a defect, adds a feature or implements an
@@ -125,7 +125,7 @@ roadmap helps potential contributors to answer the following questions:
   interested in it that did not formally commit to that task yet.
 - _What is the plan for the next release?_ ⇒ The scope for any given release at
   least contains the work items that were scheduled for that release in the
-  roadmap. Moreover, it usually is wise to align your contributions with the
+  roadmap. Moreover, it is usually wise to align your contributions with the
   scope of the next release. For example, if the next release is focused on
   fixing bugs, a code contribution that fixes more bugs will have higher chances
   of being accepted sooner than a code contribution that adds a complex, whole
@@ -177,8 +177,8 @@ relevant for contributors:
 - _Good first issue_. This label is added at the discretion of the project
   maintainers to highlight issues that would be nice for first-time contributors
   to tackle, given their perceived approachability for beginners, usefulness for
-  the project, and learning potential. In other words, they are fairly low
-  hanging fruit that nevertheless can be a fulfilling endeavor for everyone.
+  the project, and learning potential. In other words, they are fairly low-hanging
+  fruit that nevertheless can be a fulfilling endeavor for everyone.
 - _Help wanted_. This is a generic label that means that some contribution to it
   would be appreciated and likely accepted. The issue body should detail what
   kind of contributions would be welcome.
@@ -281,7 +281,7 @@ to produce a working debug executable. In reality, however, that will not work
 out of the box due to C libraries that depend on a properly configured platform
 C toolchain and development files. The best way to get these set up is to look
 at the [CI build
-workflow](https://github.com/ComunidadAylas/PackSquash/blob/master/.github/workflows/build.yml)
+workflow](https://github.com/ComunidadAylas/PackSquash/blob/master/.github/workflows/ci.yml)
 and replicate its steps on your machine.
 
 A corollary of the previously stated complications with C libraries is that your
@@ -317,7 +317,7 @@ probably can be improved nevertheless. As Clippy is an automated tool that
 proposes useful suggestions, running it before submitting a code contribution
 allows both reviewers and contributors to cut to the chase and discuss less
 trivial matters. Your code contributions should not cause any new Clippy
-warning, but if they do and you think you have good reasons to ignore them,
+warning, but if they do, and you think you have good reasons to ignore them,
 please suppress the warnings via an attribute and state your reasoning.
 
 To get started with Clippy, make sure that your Rust toolchain includes the

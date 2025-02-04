@@ -10,10 +10,10 @@ use tokio::io::AsyncRead;
 use tokio_util::codec::{Decoder, FramedRead};
 
 use crate::config::JsonFileOptions;
-use crate::pack_file::asset_type::PackFileAssetType;
 use crate::pack_file::AsyncReadAndSizeHint;
+use crate::pack_file::asset_type::PackFileAssetType;
 
-use super::{util::strip_utf8_bom, PackFile, PackFileConstructor};
+use super::{PackFile, PackFileConstructor, util::strip_utf8_bom};
 
 use self::debloater::Debloater;
 
@@ -74,7 +74,7 @@ impl Decoder for OptimizerDecoder {
 		}
 		self.reached_eof = true;
 
-		// Parse the JSON so we know how to serialize it again in a compact manner, and whether
+		// Parse the JSON, so we know how to serialize it again in a compact manner, and whether
 		// it's valid. Check whether we should parse and discard comments, too
 		let mut json_value: Value = if self.optimization_settings.always_allow_comments
 			|| asset_type_has_comments_extension(self.asset_type)
@@ -156,15 +156,37 @@ impl<T: AsyncRead + Send + Unpin + 'static> PackFile for JsonFile<T> {
 		false
 	}
 
-	fn may_be_directory_listed_atlas_texture_sprite(&self) -> bool {
-		// FIXME only return true if both the asset types match and the
-		//       corresponding texture has the may_be_directory_listed_atlas_texture
-		//       option set to true. This cannot be done elegantly with the current
-		//       iterator design though
+	fn may_be_read_and_provided_by_mods(&self) -> bool {
+		#[cfg(feature = "optifine")]
+		if matches!(
+			self.asset_type,
+			PackFileAssetType::OptifineCustomEntityModel
+				| PackFileAssetType::OptifineCustomEntityModelWithComments
+				| PackFileAssetType::OptifineCustomEntityModelPart
+				| PackFileAssetType::OptifineCustomEntityModelPartWithComments
+				| PackFileAssetType::OptifineVanillaItemModel
+				| PackFileAssetType::OptifineVanillaItemModelWithComments
+				| PackFileAssetType::OptifineVanillaTextureMetadata
+				| PackFileAssetType::OptifineVanillaTextureMetadataWithComments
+		) {
+			return true;
+		}
+
+		#[cfg(feature = "mtr3")]
+		if matches!(
+			self.asset_type,
+			PackFileAssetType::Mtr3CustomTrainModel
+				| PackFileAssetType::Mtr3CustomTrainModelWithComments
+		) {
+			return true;
+		}
+
 		matches!(
 			self.asset_type,
 			PackFileAssetType::MinecraftTextureMetadata
 				| PackFileAssetType::MinecraftTextureMetadataWithComments
+				| PackFileAssetType::GenericJson
+				| PackFileAssetType::GenericJsonWithComments
 		)
 	}
 }
@@ -190,7 +212,7 @@ impl<T: AsyncRead + Send + Unpin + 'static> PackFileConstructor<T> for JsonFile<
 /// Checks whether the specified asset type is an extension type whose file extension
 /// signals that its JSON data might have comments.
 #[cfg_attr(
-	not(any(feature = "optifine-support", feature = "mtr3-support")),
+	not(any(feature = "optifine", feature = "mtr3")),
 	allow(clippy::match_like_matches_macro)
 )]
 const fn asset_type_has_comments_extension(asset_type: PackFileAssetType) -> bool {
@@ -199,12 +221,12 @@ const fn asset_type_has_comments_extension(asset_type: PackFileAssetType) -> boo
 		| PackFileAssetType::MinecraftMetadataWithComments
 		| PackFileAssetType::MinecraftModelWithComments
 		| PackFileAssetType::GenericJsonWithComments => true,
-		#[cfg(feature = "optifine-support")]
+		#[cfg(feature = "optifine")]
 		PackFileAssetType::OptifineCustomEntityModelWithComments
 		| PackFileAssetType::OptifineCustomEntityModelPartWithComments
 		| PackFileAssetType::OptifineVanillaItemModelWithComments
 		| PackFileAssetType::OptifineVanillaTextureMetadataWithComments => true,
-		#[cfg(feature = "mtr3-support")]
+		#[cfg(feature = "mtr3")]
 		PackFileAssetType::Mtr3CustomTrainModelWithComments => true,
 		_ => false
 	}
