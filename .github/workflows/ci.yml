@@ -192,7 +192,7 @@ jobs:
       # systemd is responsible for setting up the machine ID files we use for
       # testing the system ID retrieval code, so copy a dummy one
       - name: 📏 Set up a dummy D-Bus machine ID for tests
-        if: startsWith(matrix.runner, 'ubuntu')
+        if: contains(matrix.runner, 'ubuntu')
         run: cat /proc/sys/kernel/random/uuid | tr -d '-' > /run/machine-id
 
       # Required for the build script to be able to gather version information from Git
