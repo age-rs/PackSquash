@@ -205,7 +205,7 @@ jobs:
           CARGO_BUILD_TARGET: ${{ matrix.target == 'universal2-apple-darwin' && 'aarch64-apple-darwin' || matrix.target }}
           NEXTEST_PROFILE: ci
         run: |
-          cargo nextest run --workspace --status-level all --release --lib --bins --tests --examples
+          cargo nextest run --workspace --status-level all --release --lib --bins --tests --examples --no-fail-fast
           cargo test --doc --workspace --release
 
       - name: 🔨 Build with optimized standard library
