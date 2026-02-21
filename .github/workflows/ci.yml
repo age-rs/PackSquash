@@ -106,7 +106,7 @@ jobs:
           - target: x86_64-unknown-linux-musl
             host-target: x86_64-unknown-linux-gnu
             runner: blacksmith-4vcpu-ubuntu-2404
-            container: debian:trixie-slim@sha256:f6e2cfac5cf956ea044b4bd75e6397b4372ad88fe00908045e9a0d21712ae3ba
+            container: alpine:3.23@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659
 
           - target: aarch64-unknown-linux-gnu
             host-target: aarch64-unknown-linux-gnu
@@ -116,7 +116,7 @@ jobs:
           - target: aarch64-unknown-linux-musl
             host-target: aarch64-unknown-linux-gnu
             runner: blacksmith-4vcpu-ubuntu-2404-arm
-            container: debian:trixie-slim@sha256:f6e2cfac5cf956ea044b4bd75e6397b4372ad88fe00908045e9a0d21712ae3ba
+            container: alpine:3.23@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659
 
           - target: x86_64-pc-windows-gnu
             host-target: x86_64-pc-windows-gnu
@@ -151,8 +151,8 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork
 
     steps:
-      - name: 🧰 Install Linux toolchain packages
-        if: contains(matrix.target, '-linux-')
+      - name: 🧰 Install glibc Linux toolchain packages
+        if: endsWith(matrix.target, '-linux-gnu')
         run: |
           apt-get update
           # curl is required by rustup.
@@ -161,6 +161,13 @@ jobs:
           apt-get install -yq build-essential cmake git curl \
                               musl-tools \
                               python3-markdown-it
+
+      - name: 🧰 Install musl Linux toolchain packages
+        if: endsWith(matrix.target, '-linux-musl')
+        run: |
+          apk update
+          # curl is required by rustup
+          apk add --no-cache build-base cmake git curl
 
       # This must go after the previous step so that a Git repository is checked out
       - name: 📥 Checkout source
