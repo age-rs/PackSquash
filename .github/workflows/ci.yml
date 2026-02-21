@@ -125,10 +125,12 @@ jobs:
           - target: x86_64-pc-windows-gnu
             host-target: x86_64-pc-windows-gnu
             runner: windows-latest
+            nextest-platform: x86_64-pc-windows-msvc
 
           - target: universal2-apple-darwin
             host-target: aarch64-apple-darwin
             runner: macos-latest
+            nextest-platform: universal-apple-darwin
 
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
@@ -174,9 +176,8 @@ jobs:
         if: endsWith(matrix.target, '-linux-musl')
         run: |
           apk update
-          # curl is required by rustup.
-          # jq is required by taiki-e/install-action for ARM64 runners
-          apk add --no-cache build-base bash cmake git curl jq
+          # curl is required by rustup
+          apk add --no-cache build-base bash cmake git curl
 
       # This must go after the previous step so that a Git repository is checked out
       - name: 📥 Checkout source
@@ -193,9 +194,10 @@ jobs:
           rustflags: ""
 
       - name: 🧰 Install nextest
-        uses: taiki-e/install-action@45a93d9c71692daf99a53feb97366fb6f4c3757f # v2
-        with:
-          tool: nextest
+        shell: bash
+        run: >
+          curl -fsSL 'https://get.nexte.st/latest/${{ matrix.nextest-platform || matrix.host-target }}.tar.gz'
+          | tar -xzf - -C ~/.cargo/bin
 
       - name: 🧰 Install cargo-deb
         if: endsWith(matrix.target, '-linux-gnu')
