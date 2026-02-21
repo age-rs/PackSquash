@@ -175,7 +175,7 @@ jobs:
         run: |
           apk update
           # curl is required by rustup
-          apk add --no-cache build-base cmake git curl
+          apk add --no-cache build-base bash cmake git curl
 
       # This must go after the previous step so that a Git repository is checked out
       - name: 📥 Checkout source
